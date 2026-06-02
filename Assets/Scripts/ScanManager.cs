@@ -48,8 +48,12 @@ public class ScanManager : MonoBehaviour
     {
         scanCompletePanel.SetActive(true);
 
-        int totalCount = 0;
-        foreach (var count in detectedCounts.Values) totalCount += count;
+        /*int totalCount = 0;
+        foreach (var count in detectedCounts.Values) totalCount += count;*/
+
+        // Pin integration
+        GameObject[] activePins = GameObject.FindGameObjectsWithTag("HazardPin");
+        int totalCount = activePins.Length;
 
         int duration = Mathf.RoundToInt(Time.time - scanStartTime);
 
