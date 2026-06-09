@@ -41,6 +41,7 @@ public class ScanManager : MonoBehaviour
     {
         isScanning = false;
         scanningIndicator.SetActive(false);
+        Object.FindAnyObjectByType<ARPinManager>()?.ClearAllPins();
         ShowScanComplete();
     }
 
