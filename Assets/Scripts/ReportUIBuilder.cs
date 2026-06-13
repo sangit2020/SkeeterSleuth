@@ -32,19 +32,26 @@ public class ReportUIBuilder : MonoBehaviour
 
     const float PLACEHOLDER_CONFIDENCE = 0.85f;
 
-    static readonly Color C_BG          = HexColor("#093A1B");
-    static readonly Color C_CARD        = HexColor("#174E2A");
-    static readonly Color C_CARD_LIGHT  = HexColor("#1E6335");
-    static readonly Color C_MINT        = HexColor("#C6F5D4");
-    static readonly Color C_TEAL_BTN    = HexColor("#2DD4BF");
-    static readonly Color C_ORANGE      = HexColor("#F59E0B");
-    static readonly Color C_RED         = HexColor("#EF4444");
-    static readonly Color C_GREEN_BADGE = HexColor("#22C55E");
-    static readonly Color C_WHITE       = Color.white;
-    static readonly Color C_SUBTEXT     = HexColor("#A7C4AE");
-    static readonly Color C_PROG_BG     = HexColor("#2D6A42");
-    static readonly Color C_PROG_RISK   = HexColor("#F59E0B");
-    static readonly Color C_PROG_CONF   = HexColor("#2DD4BF");
+    // ─── Color palette ────────────────────────────────────────────────────────
+    static readonly Color C_BG             = HexColor("#1D2E1F"); // Main app background
+    static readonly Color C_HEADER_BG      = HexColor("#2C5A3D"); // Top/header background
+    static readonly Color C_CARD           = HexColor("#243F2C"); // Card background
+    static readonly Color C_CARD_BORDER    = HexColor("#3C6B4C"); // Card border / outline
+    static readonly Color C_ICON_BG        = HexColor("#2D593D"); // Icon tile background
+    static readonly Color C_ICON_BORDER    = HexColor("#3C6B4C"); // Icon tile border
+    static readonly Color C_TEXT_PRIMARY   = HexColor("#F0F0F0"); // Primary text
+    static readonly Color C_SUBTEXT        = HexColor("#7EA88C"); // Secondary / muted text
+    static readonly Color C_SECTION_HEADER = HexColor("#A1D4C0"); // Section header text
+    static readonly Color C_RISK_BAR_BG     = HexColor("#3C6B4C"); // Risk bar / track background
+    static readonly Color C_HIGH_BADGE_BG   = HexColor("#6B4A2E"); // High badge background
+    static readonly Color C_HIGH_BADGE_TEXT = HexColor("#FF6B57"); // High badge text
+    static readonly Color C_MOD_BADGE_BG    = HexColor("#73652C"); // Moderate badge background
+    static readonly Color C_MOD_BADGE_TEXT  = HexColor("#EE9F28"); // Moderate badge text
+    static readonly Color C_LOW_BADGE_BG    = HexColor("#315B3F"); // Low badge background
+    static readonly Color C_LOW_BADGE_TEXT  = HexColor("#6BE089"); // Low badge text
+    static readonly Color C_BTN_FILLED_BG   = HexColor("#5ED9C0"); // Filled button background
+    static readonly Color C_BTN_FILLED_TEXT = HexColor("#143220"); // Filled button text
+    static readonly Color C_DIVIDER        = HexColor("#386C4B"); // Divider line
 
     GameObject _reportListPanel;
     GameObject _itemDetailPanel;
@@ -55,18 +62,18 @@ public class ReportUIBuilder : MonoBehaviour
     TextMeshProUGUI _listScanDate;
     TextMeshProUGUI _listScanDuration;
     TextMeshProUGUI _listScanItems;
-    RectTransform _listRiskFill;
     TextMeshProUGUI _listRiskBadgeText;
     Image _listRiskBadgeBg;
+    TextMeshProUGUI _listRiskExplanation;
+    Image[] _listRiskSegmentBg = new Image[3];
+    TextMeshProUGUI[] _listRiskSegmentText = new TextMeshProUGUI[3];
     GameObject _listRiskSummaryCard;
     GameObject _listScanInfoCard;
 
     TextMeshProUGUI _detailTitle;
     TextMeshProUGUI _detailSubtitle;
-    TextMeshProUGUI _detailCounter;
     TextMeshProUGUI _detailWhyRisk;
     TextMeshProUGUI _detailWhatToDo;
-    RectTransform _detailConfFill;
     Image _detailRiskBadgeBg;
     TextMeshProUGUI _detailRiskBadgeText;
 
@@ -216,7 +223,7 @@ public class ReportUIBuilder : MonoBehaviour
 
         _listEmptyMessage.text = string.IsNullOrEmpty(secondary)
             ? primary
-            : primary + "\n<size=12><color=#A7C4AE>" + secondary + "</color></size>";
+            : primary + "\n<size=12><color=#7EA88C>" + secondary + "</color></size>";
 
         _listEmptyMessage.gameObject.SetActive(true);
 
@@ -242,18 +249,45 @@ public class ReportUIBuilder : MonoBehaviour
         _listScanDuration.text = dur;
         _listScanItems.text = _currentReport.total_objects_detected + " total";
 
+        // ── Risk summary: pill badge + explanation + segmented indicator ──
         string overallRisk = ComputeOverallRisk(_currentDetections);
-        Color riskBadgeColor = RiskColor(overallRisk);
-        float riskRatio = overallRisk switch
-        {
-            "High" => 0.85f,
-            "Moderate" => 0.55f,
-            _ => 0.25f
-        };
+        var (badgeBg, badgeText) = RiskBadgeColors(overallRisk);
 
         _listRiskBadgeText.text = overallRisk;
-        _listRiskBadgeBg.color = riskBadgeColor;
-        _listRiskFill.sizeDelta = new Vector2(riskRatio * 260f, 0);
+        _listRiskBadgeBg.color = badgeBg;
+        _listRiskBadgeText.color = badgeText;
+
+        int detectedCount = _currentReport.total_objects_detected;
+
+        _listRiskExplanation.text =
+            "Based on " + detectedCount + " detected mosquito breeding risk" +
+            (detectedCount == 1 ? "" : "s") + ".";
+
+        int activeSegment = overallRisk switch
+        {
+            "High" => 2,
+            "Moderate" => 1,
+            _ => 0
+        };
+
+        string[] segmentRiskKeys = { "Low", "Moderate", "High" };
+
+        for (int i = 0; i < 3; i++)
+        {
+            if (i == activeSegment)
+            {
+                var (segBg, segText) = RiskBadgeColors(segmentRiskKeys[i]);
+                _listRiskSegmentBg[i].color = segBg;
+                _listRiskSegmentText[i].color = segText;
+                _listRiskSegmentText[i].fontStyle = FontStyles.Bold;
+            }
+            else
+            {
+                _listRiskSegmentBg[i].color = C_RISK_BAR_BG;
+                _listRiskSegmentText[i].color = C_SUBTEXT;
+                _listRiskSegmentText[i].fontStyle = FontStyles.Normal;
+            }
+        }
 
         foreach (Transform child in _listItemsContainer)
         {
@@ -290,7 +324,6 @@ public class ReportUIBuilder : MonoBehaviour
 
         _detailTitle.text = string.IsNullOrWhiteSpace(d.display_name) ? d.label : d.display_name;
         _detailSubtitle.text = InstanceCountText(d.label);
-        _detailCounter.text = "Detection " + (index + 1) + " of " + _currentDetections.Count;
 
         _detailWhyRisk.text = string.IsNullOrWhiteSpace(d.object_description)
             ? "No risk description available for this item."
@@ -303,8 +336,7 @@ public class ReportUIBuilder : MonoBehaviour
                 StringSplitOptions.RemoveEmptyEntries
             );
 
-            var sb = new System.Text.StringBuilder();
-            int n = 1;
+            var steps = new List<string>();
 
             foreach (string line in lines)
             {
@@ -312,12 +344,23 @@ public class ReportUIBuilder : MonoBehaviour
 
                 if (trimmed.Length > 0)
                 {
-                    sb.AppendLine(n + ". " + trimmed);
-                    n++;
+                    steps.Add(trimmed);
                 }
             }
 
-            _detailWhatToDo.text = sb.ToString().TrimEnd();
+            var sb = new System.Text.StringBuilder();
+
+            for (int i = 0; i < steps.Count; i++)
+            {
+                sb.Append("• ").Append(steps[i]);
+
+                if (i < steps.Count - 1)
+                {
+                    sb.Append("\n\n");
+                }
+            }
+
+            _detailWhatToDo.text = sb.ToString();
         }
         else
         {
@@ -325,10 +368,11 @@ public class ReportUIBuilder : MonoBehaviour
         }
 
         string risk = GetRiskLevel(d.label);
+        var (riskBg, riskText) = RiskBadgeColors(risk);
 
         _detailRiskBadgeText.text = risk + " risk";
-        _detailRiskBadgeBg.color = RiskColor(risk);
-        _detailConfFill.sizeDelta = new Vector2(PLACEHOLDER_CONFIDENCE * 200f, 0);
+        _detailRiskBadgeBg.color = riskBg;
+        _detailRiskBadgeText.color = riskText;
     }
 
     void BuildReportListPanel()
@@ -341,7 +385,7 @@ public class ReportUIBuilder : MonoBehaviour
         Transform scroll = CreateScrollView("ReportScroll", root);
         RectTransform content = scroll.Find("Viewport/Content").GetComponent<RectTransform>();
 
-        var hBlock = MakeLayoutBlock("Header", content, 135, C_BG);
+        var hBlock = MakeLayoutBlock("Header", content, 135, C_HEADER_BG);
         RectTransform hRect = hBlock.GetComponent<RectTransform>();
 
         var backBtn = MakeButton(
@@ -367,7 +411,7 @@ public class ReportUIBuilder : MonoBehaviour
             hRect,
             "Full report",
             31,
-            C_WHITE,
+            C_TEXT_PRIMARY,
             FontStyles.Bold,
             new Vector2(0, 1),
             new Vector2(1, 1),
@@ -379,7 +423,7 @@ public class ReportUIBuilder : MonoBehaviour
             "SubtitleText",
             hRect,
             "",
-            14,
+            15,
             C_SUBTEXT,
             FontStyles.Normal,
             new Vector2(0, 1),
@@ -407,60 +451,115 @@ public class ReportUIBuilder : MonoBehaviour
         _listEmptyMessage.enableWordWrapping = true;
         emptyGo.SetActive(false);
 
+        // ─────────────────────────────────────────────────────────────────
+        // RISK SUMMARY
+        // ─────────────────────────────────────────────────────────────────
         MakeSectionLabel("RISK SUMMARY", content);
 
-        _listRiskSummaryCard = MakeCard("RiskSummaryCard", content, 105);
+        _listRiskSummaryCard = MakeCard("RiskSummaryCard", content, 140);
         RectTransform riskRect = _listRiskSummaryCard.GetComponent<RectTransform>();
 
-        MakeText(
+        var overallLabel = MakeText(
             "OverallLabel",
             riskRect,
             "Overall risk level",
-            14,
-            C_SUBTEXT,
+            16,
+            C_TEXT_PRIMARY,
             FontStyles.Normal,
             new Vector2(0, 1),
             new Vector2(0, 1),
-            new Vector2(18, -19),
-            new Vector2(175, -2)
+            new Vector2(18, -50),
+            new Vector2(230, -16)
         );
+        overallLabel.alignment = TextAlignmentOptions.Left;
 
         _listRiskBadgeBg = MakeBadge(
             "RiskBadge",
             riskRect,
             "Moderate",
-            C_ORANGE,
+            C_MOD_BADGE_BG,
+            C_MOD_BADGE_TEXT,
             new Vector2(1, 1),
-            new Vector2(-18, -14)
+            new Vector2(-18, -16),
+            new Vector2(104, 34),
+            14
         );
 
         _listRiskBadgeText = _listRiskBadgeBg.GetComponentInChildren<TextMeshProUGUI>();
 
-        var barBg = new GameObject("ProgBg", typeof(RectTransform), typeof(Image));
-        barBg.transform.SetParent(riskRect, false);
-
-        RectTransform barBgRect = barBg.GetComponent<RectTransform>();
-        SetAnchors(
-            barBgRect,
+        _listRiskExplanation = MakeText(
+            "RiskExplanation",
+            riskRect,
+            "",
+            13,
+            C_SUBTEXT,
+            FontStyles.Normal,
             new Vector2(0, 1),
             new Vector2(1, 1),
-            new Vector2(18, -64),
-            new Vector2(-18, -48)
+            new Vector2(18, -90),
+            new Vector2(-18, -54)
+        );
+        _listRiskExplanation.alignment = TextAlignmentOptions.TopLeft;
+        _listRiskExplanation.enableWordWrapping = true;
+
+        // Segmented Low / Med / High indicator — active level is highlighted.
+        var segmentsRow = new GameObject(
+            "RiskSegmentsRow",
+            typeof(RectTransform),
+            typeof(HorizontalLayoutGroup)
         );
 
-        barBg.GetComponent<Image>().color = C_PROG_BG;
-        SetRounded(barBg.GetComponent<Image>(), 8);
+        segmentsRow.transform.SetParent(riskRect, false);
 
-        var barFill = new GameObject("ProgFill", typeof(RectTransform), typeof(Image));
-        barFill.transform.SetParent(barBgRect, false);
+        RectTransform segRowRect = segmentsRow.GetComponent<RectTransform>();
+        SetAnchors(
+            segRowRect,
+            new Vector2(0, 1),
+            new Vector2(1, 1),
+            new Vector2(18, -124),
+            new Vector2(-18, -98)
+        );
 
-        _listRiskFill = barFill.GetComponent<RectTransform>();
-        SetAnchors(_listRiskFill, new Vector2(0, 0), new Vector2(0, 1), Vector2.zero, Vector2.zero);
-        _listRiskFill.sizeDelta = new Vector2(140f, 0);
+        var segHlg = segmentsRow.GetComponent<HorizontalLayoutGroup>();
+        segHlg.spacing = 8;
+        segHlg.childControlWidth = true;
+        segHlg.childControlHeight = true;
+        segHlg.childForceExpandWidth = true;
+        segHlg.childForceExpandHeight = true;
 
-        barFill.GetComponent<Image>().color = C_PROG_RISK;
-        SetRounded(barFill.GetComponent<Image>(), 8);
+        string[] segmentLabels = { "Low", "Med", "High" };
 
+        for (int i = 0; i < 3; i++)
+        {
+            var seg = new GameObject("RiskSegment_" + segmentLabels[i], typeof(RectTransform), typeof(Image));
+            seg.transform.SetParent(segmentsRow.transform, false);
+
+            Image segImg = seg.GetComponent<Image>();
+            segImg.color = C_RISK_BAR_BG;
+            SetRounded(segImg, 8);
+
+            _listRiskSegmentBg[i] = segImg;
+
+            var segTextGo = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
+            segTextGo.transform.SetParent(seg.transform, false);
+
+            RectTransform stRect = segTextGo.GetComponent<RectTransform>();
+            stRect.anchorMin = Vector2.zero;
+            stRect.anchorMax = Vector2.one;
+            stRect.sizeDelta = Vector2.zero;
+
+            TextMeshProUGUI stTm = segTextGo.GetComponent<TextMeshProUGUI>();
+            stTm.text = segmentLabels[i];
+            stTm.fontSize = 12;
+            stTm.color = C_SUBTEXT;
+            stTm.alignment = TextAlignmentOptions.Center;
+
+            _listRiskSegmentText[i] = stTm;
+        }
+
+        // ─────────────────────────────────────────────────────────────────
+        // DETECTED ITEMS
+        // ─────────────────────────────────────────────────────────────────
         MakeSectionLabel("DETECTED ITEMS", content);
 
         var itemsHolder = new GameObject(
@@ -479,7 +578,7 @@ public class ReportUIBuilder : MonoBehaviour
         ihRect.sizeDelta = Vector2.zero;
 
         var vlg = itemsHolder.GetComponent<VerticalLayoutGroup>();
-        vlg.spacing = 12;
+        vlg.spacing = 14;
         vlg.childControlWidth = true;
         vlg.childControlHeight = true;
         vlg.childForceExpandWidth = true;
@@ -491,14 +590,19 @@ public class ReportUIBuilder : MonoBehaviour
 
         _listItemsContainer = itemsHolder.transform;
 
+        // ─────────────────────────────────────────────────────────────────
+        // SCAN INFO
+        // ─────────────────────────────────────────────────────────────────
         MakeSectionLabel("SCAN INFO", content);
 
-        _listScanInfoCard = MakeCard("ScanInfoCard", content, 120);
+        _listScanInfoCard = MakeCard("ScanInfoCard", content, 140);
         RectTransform infoRect = _listScanInfoCard.GetComponent<RectTransform>();
 
         BuildInfoRow(infoRect, "Date", ref _listScanDate, -20);
-        BuildInfoRow(infoRect, "Duration", ref _listScanDuration, -55);
-        BuildInfoRow(infoRect, "Items found", ref _listScanItems, -90);
+        AddDivider(infoRect, -50);
+        BuildInfoRow(infoRect, "Duration", ref _listScanDuration, -60);
+        AddDivider(infoRect, -90);
+        BuildInfoRow(infoRect, "Items found", ref _listScanItems, -100);
 
         var spacer = new GameObject("BottomSpacer", typeof(RectTransform), typeof(LayoutElement));
         spacer.transform.SetParent(content, false);
@@ -515,7 +619,10 @@ public class ReportUIBuilder : MonoBehaviour
         Transform scroll = CreateScrollView("DetailScroll", root);
         RectTransform content = scroll.Find("Viewport/Content").GetComponent<RectTransform>();
 
-        var hBlock = MakeLayoutBlock("Header", content, 135, C_BG);
+        // ─────────────────────────────────────────────────────────────────
+        // HEADER
+        // ─────────────────────────────────────────────────────────────────
+        var hBlock = MakeLayoutBlock("Header", content, 135, C_HEADER_BG);
         RectTransform hRect = hBlock.GetComponent<RectTransform>();
 
         var backBtn = MakeButton(
@@ -542,7 +649,7 @@ public class ReportUIBuilder : MonoBehaviour
             hRect,
             "",
             31,
-            C_WHITE,
+            C_TEXT_PRIMARY,
             FontStyles.Bold,
             new Vector2(0, 1),
             new Vector2(1, 1),
@@ -554,7 +661,7 @@ public class ReportUIBuilder : MonoBehaviour
             "DetailSubtitle",
             hRect,
             "",
-            14,
+            15,
             C_SUBTEXT,
             FontStyles.Normal,
             new Vector2(0, 1),
@@ -563,142 +670,78 @@ public class ReportUIBuilder : MonoBehaviour
             new Vector2(-24, -100)
         );
 
-        var imgCard = MakeCard("ImageCard", content, 170);
-        RectTransform imgRect = imgCard.GetComponent<RectTransform>();
+        // ─────────────────────────────────────────────────────────────────
+        // RISK LEVEL
+        // ─────────────────────────────────────────────────────────────────
+        MakeSectionLabel("RISK LEVEL", content);
+
+        var riskCard = MakeCard("RiskLevelCard", content, 112);
+        RectTransform riskCardRect = riskCard.GetComponent<RectTransform>();
+
+        var overallItemLabel = MakeText(
+            "OverallItemLabel",
+            riskCardRect,
+            "Overall item risk",
+            16,
+            C_TEXT_PRIMARY,
+            FontStyles.Normal,
+            new Vector2(0, 1),
+            new Vector2(0, 1),
+            new Vector2(20, -52),
+            new Vector2(190, -18)
+        );
+        overallItemLabel.alignment = TextAlignmentOptions.Left;
 
         _detailRiskBadgeBg = MakeBadge(
             "DetailRiskBadge",
-            imgRect,
+            riskCardRect,
             "High risk",
-            C_RED,
-            new Vector2(0, 1),
-            new Vector2(18, -14)
+            C_HIGH_BADGE_BG,
+            C_HIGH_BADGE_TEXT,
+            new Vector2(1, 1),
+            new Vector2(-20, -18),
+            new Vector2(130, 34),
+            13
         );
 
         _detailRiskBadgeText = _detailRiskBadgeBg.GetComponentInChildren<TextMeshProUGUI>();
 
-        _detailCounter = MakeText(
-            "CounterText",
-            imgRect,
-            "",
-            12,
+        var detailRiskExplanation = MakeText(
+            "DetailRiskExplanation",
+            riskCardRect,
+            "Based on this object's potential to hold standing water.",
+            13,
             C_SUBTEXT,
             FontStyles.Normal,
-            new Vector2(1, 0),
-            new Vector2(1, 0),
-            new Vector2(-140, 12),
-            new Vector2(-18, 30)
+            new Vector2(0, 1),
+            new Vector2(1, 1),
+            new Vector2(20, -94),
+            new Vector2(-20, -58)
         );
+        detailRiskExplanation.alignment = TextAlignmentOptions.TopLeft;
+        detailRiskExplanation.enableWordWrapping = true;
 
-        MakeText(
-            "ImgPlaceholder",
-            imgRect,
-            "🔍",
-            50,
-            C_WHITE,
-            FontStyles.Normal,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(-24, 10),
-            new Vector2(24, 60)
-        );
-
+        // ─────────────────────────────────────────────────────────────────
+        // WHY IT'S A RISK
+        // ─────────────────────────────────────────────────────────────────
         MakeSectionLabel("WHY IT'S A RISK", content);
 
         var whyCard = MakeAutoSizeCard("WhyRiskCard", content);
-        RectTransform whyRect = whyCard.GetComponent<RectTransform>();
+        _detailWhyRisk = GetAutoSizeCardText(whyCard);
+        _detailWhyRisk.lineSpacing = 4;
 
-        _detailWhyRisk = MakeText(
-            "WhyText",
-            whyRect,
-            "",
-            14,
-            C_MINT,
-            FontStyles.Normal,
-            new Vector2(0, 1),
-            new Vector2(1, 0),
-            new Vector2(18, -15),
-            new Vector2(-18, 15)
-        );
-
-        _detailWhyRisk.enableWordWrapping = true;
-
+        // ─────────────────────────────────────────────────────────────────
+        // WHAT TO DO
+        // ─────────────────────────────────────────────────────────────────
         MakeSectionLabel("WHAT TO DO", content);
 
         var todoCard = MakeAutoSizeCard("WhatToDoCard", content);
-        RectTransform todoRect = todoCard.GetComponent<RectTransform>();
+        _detailWhatToDo = GetAutoSizeCardText(todoCard);
+        _detailWhatToDo.lineSpacing = 6;
 
-        _detailWhatToDo = MakeText(
-            "TodoText",
-            todoRect,
-            "",
-            14,
-            C_MINT,
-            FontStyles.Normal,
-            new Vector2(0, 1),
-            new Vector2(1, 0),
-            new Vector2(18, -15),
-            new Vector2(-18, 15)
-        );
-
-        _detailWhatToDo.enableWordWrapping = true;
-
-        MakeSectionLabel("DETECTION CONFIDENCE", content);
-
-        var confCard = MakeCard("ConfidenceCard", content, 70);
-        RectTransform confRect = confCard.GetComponent<RectTransform>();
-
-        MakeText(
-            "ModelLabel",
-            confRect,
-            "Model",
-            14,
-            C_SUBTEXT,
-            FontStyles.Normal,
-            new Vector2(0, 0.5f),
-            new Vector2(0, 0.5f),
-            new Vector2(18, -10),
-            new Vector2(75, 10)
-        );
-
-        var confBg = new GameObject("ConfBg", typeof(RectTransform), typeof(Image));
-        confBg.transform.SetParent(confRect, false);
-
-        RectTransform confBgRect = confBg.GetComponent<RectTransform>();
-        SetAnchors(
-            confBgRect,
-            new Vector2(0, 0.5f),
-            new Vector2(1, 0.5f),
-            new Vector2(85, -8),
-            new Vector2(-80, 8)
-        );
-
-        confBg.GetComponent<Image>().color = C_PROG_BG;
-        SetRounded(confBg.GetComponent<Image>(), 8);
-
-        var confFill = new GameObject("ConfFill", typeof(RectTransform), typeof(Image));
-        confFill.transform.SetParent(confBgRect, false);
-
-        _detailConfFill = confFill.GetComponent<RectTransform>();
-        SetAnchors(_detailConfFill, new Vector2(0, 0), new Vector2(0, 1), Vector2.zero, Vector2.zero);
-        _detailConfFill.sizeDelta = new Vector2(PLACEHOLDER_CONFIDENCE * 200f, 0);
-
-        confFill.GetComponent<Image>().color = C_PROG_CONF;
-        SetRounded(confFill.GetComponent<Image>(), 8);
-
-        MakeText(
-            "PercLabel",
-            confRect,
-            ((int)(PLACEHOLDER_CONFIDENCE * 100)) + "%",
-            14,
-            C_WHITE,
-            FontStyles.Bold,
-            new Vector2(1, 0.5f),
-            new Vector2(1, 0.5f),
-            new Vector2(-58, -10),
-            new Vector2(-18, 10)
-        );
-
+        // ─────────────────────────────────────────────────────────────────
+        // PREV / NEXT NAVIGATION
+        // ─────────────────────────────────────────────────────────────────
         var navRow = new GameObject(
             "NavRow",
             typeof(RectTransform),
@@ -707,7 +750,7 @@ public class ReportUIBuilder : MonoBehaviour
         );
 
         navRow.transform.SetParent(content, false);
-        navRow.GetComponent<LayoutElement>().preferredHeight = 60;
+        navRow.GetComponent<LayoutElement>().preferredHeight = 64;
 
         var hlg = navRow.GetComponent<HorizontalLayoutGroup>();
         hlg.spacing = 12;
@@ -723,13 +766,13 @@ public class ReportUIBuilder : MonoBehaviour
             "PrevBtn",
             navRect,
             "← Prev Item",
-            C_WHITE,
-            14,
+            C_TEXT_PRIMARY,
+            15,
             Vector2.zero,
             Vector2.one,
             Vector2.zero,
-            new Vector2(0, 42),
-            C_CARD_LIGHT
+            new Vector2(0, 48),
+            C_CARD_BORDER
         );
 
         prevBtn.GetComponent<Button>().onClick.AddListener(() =>
@@ -746,13 +789,13 @@ public class ReportUIBuilder : MonoBehaviour
             "NextBtn",
             navRect,
             "Next Item →",
-            C_BG,
-            14,
+            C_BTN_FILLED_TEXT,
+            15,
             Vector2.zero,
             Vector2.one,
             Vector2.zero,
-            new Vector2(0, 42),
-            C_TEAL_BTN
+            new Vector2(0, 48),
+            C_BTN_FILLED_BG
         );
 
         nextBtn.GetComponent<Button>().onClick.AddListener(() =>
@@ -781,11 +824,13 @@ public class ReportUIBuilder : MonoBehaviour
         );
 
         card.transform.SetParent(parent, false);
-        card.GetComponent<LayoutElement>().preferredHeight = 78;
+        card.GetComponent<LayoutElement>().preferredHeight = 80;
 
-        Image img = card.GetComponent<Image>();
-        img.color = C_CARD;
-        SetRounded(img, 16);
+        Image border = card.GetComponent<Image>();
+        border.color = C_CARD_BORDER;
+        SetRounded(border, 16);
+
+        Image fill = AddCardFill(card.transform, 1.5f, C_CARD);
 
         RectTransform rect = card.GetComponent<RectTransform>();
 
@@ -799,8 +844,11 @@ public class ReportUIBuilder : MonoBehaviour
         iRect.anchoredPosition = new Vector2(16, 0);
         iRect.sizeDelta = new Vector2(48, 48);
 
-        icon.GetComponent<Image>().color = C_CARD_LIGHT;
-        SetRounded(icon.GetComponent<Image>(), 24);
+        Image iconBorder = icon.GetComponent<Image>();
+        iconBorder.color = C_ICON_BORDER;
+        SetRounded(iconBorder, 24);
+
+        AddCardFill(icon.transform, 1.5f, C_ICON_BG);
 
         var emojiGo = new GameObject("Emoji", typeof(RectTransform), typeof(TextMeshProUGUI));
         emojiGo.transform.SetParent(icon.transform, false);
@@ -812,7 +860,7 @@ public class ReportUIBuilder : MonoBehaviour
 
         TextMeshProUGUI eTM = emojiGo.GetComponent<TextMeshProUGUI>();
         eTM.text = GetIconForLabel(d.label);
-        eTM.fontSize = 21;
+        eTM.fontSize = 22;
         eTM.alignment = TextAlignmentOptions.Center;
 
         var nameGo = new GameObject("ItemName", typeof(RectTransform), typeof(TextMeshProUGUI));
@@ -822,13 +870,13 @@ public class ReportUIBuilder : MonoBehaviour
         nRect.anchorMin = new Vector2(0, 1);
         nRect.anchorMax = new Vector2(1, 1);
         nRect.pivot = new Vector2(0, 1);
-        nRect.anchoredPosition = new Vector2(75, -13);
+        nRect.anchoredPosition = new Vector2(75, -14);
         nRect.sizeDelta = new Vector2(-155, 26);
 
         TextMeshProUGUI nTM = nameGo.GetComponent<TextMeshProUGUI>();
         nTM.text = string.IsNullOrWhiteSpace(d.display_name) ? d.label : d.display_name;
-        nTM.fontSize = 16;
-        nTM.color = C_WHITE;
+        nTM.fontSize = 17;
+        nTM.color = C_TEXT_PRIMARY;
         nTM.fontStyle = FontStyles.Bold;
 
         var subGo = new GameObject("ItemSub", typeof(RectTransform), typeof(TextMeshProUGUI));
@@ -838,21 +886,27 @@ public class ReportUIBuilder : MonoBehaviour
         sRect.anchorMin = new Vector2(0, 0);
         sRect.anchorMax = new Vector2(1, 0);
         sRect.pivot = new Vector2(0, 0);
-        sRect.anchoredPosition = new Vector2(75, 15);
+        sRect.anchoredPosition = new Vector2(75, 16);
         sRect.sizeDelta = new Vector2(-155, 20);
 
         TextMeshProUGUI sTM = subGo.GetComponent<TextMeshProUGUI>();
         sTM.text = CountInstances(d.label) + " detected · " + GetRiskLevel(d.label) + " risk";
-        sTM.fontSize = 12;
+        sTM.fontSize = 13;
         sTM.color = C_SUBTEXT;
+
+        string riskLevel = GetRiskLevel(d.label);
+        var (badgeBg, badgeText) = RiskBadgeColors(riskLevel);
 
         MakeBadge(
             "RiskBadge",
             rect,
-            GetRiskLevel(d.label),
-            RiskColor(GetRiskLevel(d.label)),
+            riskLevel,
+            badgeBg,
+            badgeText,
             new Vector2(1, 0.5f),
-            new Vector2(-46, 0)
+            new Vector2(-46, 0),
+            new Vector2(92, 28),
+            12
         );
 
         var arrowGo = new GameObject("Arrow", typeof(RectTransform), typeof(TextMeshProUGUI));
@@ -873,7 +927,7 @@ public class ReportUIBuilder : MonoBehaviour
 
         Button button = card.GetComponent<Button>();
         button.onClick.AddListener(() => ShowItemDetail(index));
-        button.targetGraphic = img;
+        button.targetGraphic = fill;
     }
 
     static GameObject CreateFullScreenPanel(string name, Transform parent, Color bg)
@@ -908,15 +962,20 @@ public class ReportUIBuilder : MonoBehaviour
         var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(LayoutElement));
         go.transform.SetParent(parent, false);
 
-        Image img = go.GetComponent<Image>();
-        img.color = C_CARD;
-        SetRounded(img, 16);
+        Image border = go.GetComponent<Image>();
+        border.color = C_CARD_BORDER;
+        SetRounded(border, 16);
+
+        AddCardFill(go.transform, 1.5f, C_CARD);
 
         go.GetComponent<LayoutElement>().preferredHeight = fixedHeight;
 
         return go;
     }
 
+    // Auto-size card. Height is driven by a VerticalLayoutGroup with 20px padding on all
+    // sides, which avoids stretch-anchor issues when ContentSizeFitter is active.
+    // Always call GetAutoSizeCardText() immediately after to create the body text element.
     static GameObject MakeAutoSizeCard(string name, Transform parent)
     {
         var go = new GameObject(
@@ -924,7 +983,8 @@ public class ReportUIBuilder : MonoBehaviour
             typeof(RectTransform),
             typeof(Image),
             typeof(LayoutElement),
-            typeof(ContentSizeFitter)
+            typeof(ContentSizeFitter),
+            typeof(VerticalLayoutGroup)
         );
 
         go.transform.SetParent(parent, false);
@@ -933,10 +993,58 @@ public class ReportUIBuilder : MonoBehaviour
         img.color = C_CARD;
         SetRounded(img, 16);
 
+        var vlg = go.GetComponent<VerticalLayoutGroup>();
+        vlg.padding = new RectOffset(20, 20, 20, 20);
+        vlg.childControlWidth = true;
+        vlg.childControlHeight = true;
+        vlg.childForceExpandWidth = true;
+        vlg.childForceExpandHeight = false;
+
         go.GetComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-        go.GetComponent<LayoutElement>().minHeight = 65;
+        go.GetComponent<LayoutElement>().minHeight = 72;
 
         return go;
+    }
+
+    // Creates the body-text child inside a card built with MakeAutoSizeCard.
+    // The LayoutElement lets ContentSizeFitter measure the TMP preferred height.
+    static TextMeshProUGUI GetAutoSizeCardText(GameObject card)
+    {
+        var go = new GameObject(
+            "BodyText",
+            typeof(RectTransform),
+            typeof(TextMeshProUGUI),
+            typeof(LayoutElement)
+        );
+
+        go.transform.SetParent(card.transform, false);
+        go.GetComponent<LayoutElement>().flexibleWidth = 1;
+
+        TextMeshProUGUI tm = go.GetComponent<TextMeshProUGUI>();
+        tm.text = "";
+        tm.fontSize = 15;
+        tm.color = C_TEXT_PRIMARY;
+        tm.fontStyle = FontStyles.Normal;
+        tm.enableWordWrapping = true;
+
+        return tm;
+    }
+
+    // Adds an inset "fill" image on top of a card's border-colored background,
+    // creating a thin border/outline effect around the card edges.
+    static Image AddCardFill(Transform cardTransform, float inset, Color fillColor)
+    {
+        var fill = new GameObject("Fill", typeof(RectTransform), typeof(Image));
+        fill.transform.SetParent(cardTransform, false);
+
+        RectTransform fRect = fill.GetComponent<RectTransform>();
+        SetAnchors(fRect, Vector2.zero, Vector2.one, new Vector2(inset, inset), new Vector2(-inset, -inset));
+
+        Image img = fill.GetComponent<Image>();
+        img.color = fillColor;
+        SetRounded(img, 14.5f);
+
+        return img;
     }
 
     static void MakeSectionLabel(string text, Transform parent)
@@ -949,14 +1057,15 @@ public class ReportUIBuilder : MonoBehaviour
         );
 
         go.transform.SetParent(parent, false);
-        go.GetComponent<LayoutElement>().preferredHeight = 32;
+        go.GetComponent<LayoutElement>().preferredHeight = 34;
 
         TextMeshProUGUI tm = go.GetComponent<TextMeshProUGUI>();
         tm.text = text;
-        tm.fontSize = 12;
-        tm.color = C_SUBTEXT;
+        tm.fontSize = 13;
+        tm.color = C_SECTION_HEADER;
         tm.fontStyle = FontStyles.Bold;
-        tm.margin = new Vector4(20, 10, 20, 0);
+        tm.characterSpacing = 2f;
+        tm.margin = new Vector4(20, 14, 20, 0);
     }
 
     static TextMeshProUGUI MakeText(
@@ -996,8 +1105,11 @@ public class ReportUIBuilder : MonoBehaviour
         Transform parent,
         string label,
         Color bg,
+        Color textColor,
         Vector2 anchor,
-        Vector2 anchoredPos
+        Vector2 anchoredPos,
+        Vector2 size,
+        float fontSize
     )
     {
         var go = new GameObject(name, typeof(RectTransform), typeof(Image));
@@ -1008,7 +1120,7 @@ public class ReportUIBuilder : MonoBehaviour
         rect.anchorMax = anchor;
         rect.pivot = anchor;
         rect.anchoredPosition = anchoredPos;
-        rect.sizeDelta = new Vector2(92, 26);
+        rect.sizeDelta = size;
 
         Image img = go.GetComponent<Image>();
         img.color = bg;
@@ -1024,8 +1136,8 @@ public class ReportUIBuilder : MonoBehaviour
 
         TextMeshProUGUI tm = textGo.GetComponent<TextMeshProUGUI>();
         tm.text = label;
-        tm.fontSize = 12;
-        tm.color = Color.white;
+        tm.fontSize = fontSize;
+        tm.color = textColor;
         tm.fontStyle = FontStyles.Bold;
         tm.alignment = TextAlignmentOptions.Center;
 
@@ -1127,12 +1239,12 @@ public class ReportUIBuilder : MonoBehaviour
         cRect.sizeDelta = Vector2.zero;
 
         VerticalLayoutGroup vlg = content.GetComponent<VerticalLayoutGroup>();
-        vlg.spacing = 13;
+        vlg.spacing = 18;
         vlg.childControlWidth = true;
         vlg.childControlHeight = true;
         vlg.childForceExpandWidth = true;
         vlg.childForceExpandHeight = false;
-        vlg.padding = new RectOffset(16, 16, 20, 20);
+        vlg.padding = new RectOffset(16, 16, 24, 28);
 
         content.GetComponent<ContentSizeFitter>().verticalFit =
             ContentSizeFitter.FitMode.PreferredSize;
@@ -1149,12 +1261,12 @@ public class ReportUIBuilder : MonoBehaviour
             labelText + "_L",
             parent,
             labelText,
-            14,
+            15,
             C_SUBTEXT,
             FontStyles.Normal,
             new Vector2(0, 1),
             new Vector2(0, 1),
-            new Vector2(18, yOffset - 16),
+            new Vector2(18, yOffset - 20),
             new Vector2(135, yOffset)
         );
 
@@ -1162,16 +1274,33 @@ public class ReportUIBuilder : MonoBehaviour
             labelText + "_V",
             parent,
             "—",
-            14,
-            C_WHITE,
+            15,
+            C_TEXT_PRIMARY,
             FontStyles.Bold,
             new Vector2(1, 1),
             new Vector2(1, 1),
-            new Vector2(-140, yOffset - 16),
+            new Vector2(-140, yOffset - 20),
             new Vector2(-18, yOffset)
         );
 
         valueRef.alignment = TextAlignmentOptions.Right;
+    }
+
+    // Thin horizontal divider line, vertically centered at yPos (relative to the
+    // parent's top edge, e.g. -50 means 50px below the top of the parent rect).
+    static void AddDivider(Transform parent, float yPos)
+    {
+        var go = new GameObject("Divider", typeof(RectTransform), typeof(Image));
+        go.transform.SetParent(parent, false);
+
+        RectTransform rect = go.GetComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0, 1);
+        rect.anchorMax = new Vector2(1, 1);
+        rect.pivot = new Vector2(0.5f, 1f);
+        rect.offsetMin = new Vector2(18, yPos - 0.5f);
+        rect.offsetMax = new Vector2(-18, yPos + 0.5f);
+
+        go.GetComponent<Image>().color = C_DIVIDER;
     }
 
     static void SetAnchors(
@@ -1296,13 +1425,14 @@ public class ReportUIBuilder : MonoBehaviour
         return "Low";
     }
 
-    static Color RiskColor(string risk)
+    // Returns (background, text) colors for a risk badge / pill of the given level.
+    static (Color bg, Color text) RiskBadgeColors(string risk)
     {
         return risk switch
         {
-            "High" => C_RED,
-            "Moderate" => C_ORANGE,
-            _ => C_GREEN_BADGE
+            "High" => (C_HIGH_BADGE_BG, C_HIGH_BADGE_TEXT),
+            "Moderate" => (C_MOD_BADGE_BG, C_MOD_BADGE_TEXT),
+            _ => (C_LOW_BADGE_BG, C_LOW_BADGE_TEXT)
         };
     }
 
