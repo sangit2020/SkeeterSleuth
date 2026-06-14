@@ -99,45 +99,96 @@ public class DatabaseManager : MonoBehaviour
 
     private void SeedObjectTypesAndMitigations()
     {
-        // IMPORTANT: label should match the raw YOLO output string.
+        // IMPORTANT:
+        // The label field must match the raw YOLO class name from the YAML file exactly.
+        // The displayName field is what the user sees in the report UI.
+
         SeedObjectType(
-            label: "cup",
-            displayName: "Cup",
-            description: "Cups can collect standing water and create a possible mosquito breeding site.",
-            iconAssetPath: "Icons/cup",
-            mitigationDescription: "Remove the cup, recycle it, or store it upside down."
+            label: "ss_birdbath",
+            displayName: "Bird Bath",
+            description: "Bird baths can hold standing water and become mosquito breeding sites if the water is not changed regularly.",
+            iconAssetPath: "Icons/birdbath",
+            mitigationDescription: "Empty and scrub the bird bath regularly; Change the water at least once a week; Keep the basin clean to prevent mosquito larvae."
         );
 
         SeedObjectType(
-            label: "campfire",
-            displayName: "Campfire Pit",
-            description: "Campfire pits can collect rainwater when uncovered.",
-            iconAssetPath: "Icons/campfire",
-            mitigationDescription: "Cover the fire pit when not in use and empty any standing water after rainfall."
+            label: "ss_bromiliad",
+            displayName: "Bromeliad",
+            description: "Bromeliads can collect water between their leaves, which may create a hidden mosquito breeding area.",
+            iconAssetPath: "Icons/bromeliad",
+            mitigationDescription: "Flush the plant cups with fresh water regularly; Remove trapped debris; Avoid letting water sit for long periods."
         );
 
         SeedObjectType(
-            label: "bucket",
+            label: "ss_bucket",
             displayName: "Bucket",
-            description: "Buckets can hold standing water and become mosquito breeding sites.",
+            description: "Buckets can collect rainwater and are common mosquito breeding sites when left outside.",
             iconAssetPath: "Icons/bucket",
-            mitigationDescription: "Empty the bucket, cover it, or store it upside down."
+            mitigationDescription: "Empty the bucket after rain; Store it upside down; Keep it covered when not in use."
         );
 
         SeedObjectType(
-            label: "tire",
+            label: "ss_pot",
+            displayName: "Planter / Empty Pot",
+            description: "Empty pots and planters can collect standing water, especially in the bottom or drainage areas.",
+            iconAssetPath: "Icons/pot",
+            mitigationDescription: "Empty any collected water; Store unused pots upside down; Check drainage holes to make sure water can flow out."
+        );
+
+        SeedObjectType(
+            label: "ss_tire",
             displayName: "Tire",
-            description: "Tires can trap rainwater and are common mosquito breeding sites.",
+            description: "Tires can trap rainwater and are one of the most common outdoor mosquito breeding sites.",
             iconAssetPath: "Icons/tire",
-            mitigationDescription: "Drain the tire, cover it, or dispose of it properly."
+            mitigationDescription: "Drain all standing water; Store tires indoors or under cover; Dispose of unused tires properly."
         );
 
         SeedObjectType(
-            label: "bottle",
-            displayName: "Bottle",
-            description: "Bottles can hold small amounts of standing water where mosquitoes may breed.",
-            iconAssetPath: "Icons/bottle",
-            mitigationDescription: "Remove the bottle, recycle it, or store it upside down."
+            label: "ss_trashcan",
+            displayName: "Trash Can",
+            description: "Trash cans and lids can collect standing water if left uncovered or upside down.",
+            iconAssetPath: "Icons/trashcan",
+            mitigationDescription: "Keep the trash can covered; Empty water from lids or bottoms; Store bins where rainwater cannot collect."
+        );
+
+        SeedObjectType(
+            label: "ss_treehole",
+            displayName: "Tree Hole",
+            description: "Tree holes can naturally hold water and may provide a protected area for mosquitoes to breed.",
+            iconAssetPath: "Icons/treehole",
+            mitigationDescription: "Flush the tree hole with water when possible; Remove organic debris; Contact a professional if filling or treating the hole is needed."
+        );
+
+        SeedObjectType(
+            label: "ss_waterhyacinth",
+            displayName: "Water Hyacinth",
+            description: "Water hyacinths can create still, shaded water areas where mosquitoes may breed.",
+            iconAssetPath: "Icons/waterhyacinth",
+            mitigationDescription: "Thin or remove excessive plants; Keep water moving if possible; Check nearby standing water for larvae."
+        );
+
+        SeedObjectType(
+            label: "ss_wateringcan",
+            displayName: "Watering Can",
+            description: "Watering cans can hold leftover water and become mosquito breeding sites if stored outside.",
+            iconAssetPath: "Icons/wateringcan",
+            mitigationDescription: "Empty after each use; Store upside down; Keep indoors or under cover when not in use."
+        );
+
+        SeedObjectType(
+            label: "ss_waterlettuce",
+            displayName: "Water Lettuce",
+            description: "Water lettuce can create still water pockets and shaded areas that may support mosquito breeding.",
+            iconAssetPath: "Icons/waterlettuce",
+            mitigationDescription: "Thin or remove excess plants; Keep water circulating; Inspect the area regularly for mosquito larvae."
+        );
+
+        SeedObjectType(
+            label: "ss_wheelbarrow",
+            displayName: "Wheelbarrow",
+            description: "Wheelbarrows can collect rainwater when left outside upright.",
+            iconAssetPath: "Icons/wheelbarrow",
+            mitigationDescription: "Tip the wheelbarrow over after use; Store it under cover; Empty any standing water after rainfall."
         );
     }
 
@@ -322,28 +373,38 @@ public class DatabaseManager : MonoBehaviour
     {
         int reportId = SaveReport(
             durationSeconds: 45,
-            totalObjectsDetected: 2,
-            notes: "Mock scan for database testing."
+            totalObjectsDetected: 3,
+            notes: "Mock scan for database testing with current YOLO labels."
         );
 
         SaveDetection(
             reportId: reportId,
-            objectLabel: "cup",
+            objectLabel: "ss_bucket",
             bboxX: 0.25f,
             bboxY: 0.30f,
             bboxW: 0.15f,
             bboxH: 0.20f,
-            screenshotPath: "Screenshots/mock_cup.png"
+            screenshotPath: "Screenshots/mock_bucket.png"
         );
 
         SaveDetection(
             reportId: reportId,
-            objectLabel: "campfire",
+            objectLabel: "ss_tire",
             bboxX: 0.55f,
             bboxY: 0.40f,
             bboxW: 0.25f,
             bboxH: 0.25f,
-            screenshotPath: "Screenshots/mock_campfire.png"
+            screenshotPath: "Screenshots/mock_tire.png"
+        );
+
+        SaveDetection(
+            reportId: reportId,
+            objectLabel: "ss_birdbath",
+            bboxX: 0.40f,
+            bboxY: 0.50f,
+            bboxW: 0.20f,
+            bboxH: 0.20f,
+            screenshotPath: "Screenshots/mock_birdbath.png"
         );
 
         List<DetectionWithDetails> savedDetections = GetDetectionsForReport(reportId);
