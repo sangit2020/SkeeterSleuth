@@ -329,6 +329,8 @@ MonoBehaviour:
   scanDurationText: {fileID: 0}
   itemsDetectedText: {fileID: 320219187}
   mitigationPreviewText: {fileID: 0}
+  yoloInference: {fileID: 0}
+  openReportImmediatelyAfterScan: 0
 --- !u!4 &144995575
 Transform:
   m_ObjectHideFlags: 0
@@ -4235,6 +4237,10 @@ PrefabInstance:
     - target: {fileID: 999605467155976868, guid: 946fec6381ba343498ba3b6a07e4829b, type: 3}
       propertyPath: m_Name
       value: DatabaseManager
+      objectReference: {fileID: 0}
+    - target: {fileID: 3208125897108992327, guid: 946fec6381ba343498ba3b6a07e4829b, type: 3}
+      propertyPath: runMockScanOnStart
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 4331357915481008452, guid: 946fec6381ba343498ba3b6a07e4829b, type: 3}
       propertyPath: m_LocalPosition.x

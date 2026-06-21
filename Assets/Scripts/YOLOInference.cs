@@ -76,6 +76,7 @@ public class YOLOInference : MonoBehaviour
 
             using var inputTensor = new Unity.InferenceEngine.Tensor<float>(
                 new Unity.InferenceEngine.TensorShape(1, 3, INPUT_SIZE, INPUT_SIZE), floatData);
+
             worker.Schedule(inputTensor);
 
             using var outputTensor = worker.PeekOutput("output0") as Unity.InferenceEngine.Tensor<float>;
@@ -83,6 +84,11 @@ public class YOLOInference : MonoBehaviour
 
             var rawDetections = ParseDetections(outputData);
             currentDetections = ApplyNMS(rawDetections);
+
+            if (scanManager != null && currentDetections.Count > 0)
+            {
+                scanManager.RegisterDetections(currentDetections);
+            }
 
             if (currentDetections.Count > 0)
                 Debug.Log($"Detections this frame: {currentDetections.Count}");
@@ -93,7 +99,7 @@ public class YOLOInference : MonoBehaviour
     {
         var results = new List<DetectionResult>();
         int numDetections = 8400;
-        int numClasses = 10;
+        int numClasses = 13;
         int stride = 4 + numClasses;
 
         for (int i = 0; i < numDetections; i++)
@@ -176,12 +182,24 @@ public class YOLOInference : MonoBehaviour
     string GetLabel(int classId)
     {
         string[] labels = {
-            "ss_birdbath", "ss_bromiliad", "ss_bucket", "ss_pot",
-            "ss_puddle", "ss_tire", "ss_trashcan", "ss_treehole",
-            "ss_wateringcan", "ss_wheelbarrow"
+            "ss_birdbath",
+            "ss_bromiliad",
+            "ss_bucket",
+            "ss_grill",
+            "ss_inflatablepool",
+            "ss_pot",
+            "ss_tire",
+            "ss_trashcan",
+            "ss_treehole",
+            "ss_waterhyacinth",
+            "ss_wateringcan",
+            "ss_waterlettuce",
+            "ss_wheelbarrow"
         };
+
         if (classId >= 0 && classId < labels.Length)
             return labels[classId];
+
         return "unknown";
     }
 
