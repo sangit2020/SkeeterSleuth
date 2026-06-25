@@ -1350,6 +1350,11 @@ public class ReportUIBuilder : MonoBehaviour
         int c = CountInstances(label);
         return c == 1 ? "1 instance detected" : c + " instances detected";
     }
+    
+    public static string GetRiskLevelPublic(string label)
+    {
+        return GetRiskLevel(label);
+    }
 
     static string GetRiskLevel(string label)
     {
