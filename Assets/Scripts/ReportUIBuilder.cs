@@ -1360,31 +1360,52 @@ public class ReportUIBuilder : MonoBehaviour
 
         label = label.ToLowerInvariant();
 
-        // High-risk standing-water containers from current YAML labels.
+        // High based on the table:
+        // Bromiliads has a High row for "Remove".
         if (
-            label.Contains("ss_tire") ||
-            label.Contains("ss_bucket") ||
-            label.Contains("ss_trashcan") ||
-            label.Contains("ss_wheelbarrow")
+            label.Contains("ss_bromiliad")
         )
         {
             return "High";
         }
 
-        // Moderate-risk yard/water-holding objects from current YAML labels.
+        // Medium based on the table:
+        // Tires = Medium
+        // Planters/empty pots = Medium for drill drainage hole
+        // Water Hyacinths = Medium
+        // Water Lettuce = Medium
+        // Trash cans = Medium for drill drainage hole
+        // Grill = Medium
         if (
-            label.Contains("ss_birdbath") ||
+            label.Contains("ss_tire") ||
             label.Contains("ss_pot") ||
-            label.Contains("ss_wateringcan") ||
-            label.Contains("ss_treehole") ||
-            label.Contains("ss_bromiliad") ||
             label.Contains("ss_waterhyacinth") ||
-            label.Contains("ss_waterlettuce")
+            label.Contains("ss_waterlettuce") ||
+            label.Contains("ss_trashcan") ||
+            label.Contains("ss_grill")
         )
         {
             return "Moderate";
         }
 
+        // Low based on the table:
+        // Treehole = Low
+        // Pool, inflatable = Low
+        // Birdbaths = Low
+        // Wheelbarrows = Low
+        // Watering cans = Low
+        if (
+            label.Contains("ss_treehole") ||
+            label.Contains("ss_inflatablepool") ||
+            label.Contains("ss_birdbath") ||
+            label.Contains("ss_wheelbarrow") ||
+            label.Contains("ss_wateringcan")
+        )
+        {
+            return "Low";
+        }
+
+        // Bucket is not visible in the table screenshot, so leave unknowns as Low.
         return "Low";
     }
 
