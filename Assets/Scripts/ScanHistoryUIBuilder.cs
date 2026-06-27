@@ -9,7 +9,7 @@ using TMPro;
 ///
 /// SETUP:
 ///   1. Attach this script to any persistent GameObject (e.g. "ScanHistoryManager").
-///   2. Wire the NavHistory button's OnClick to: ScanHistoryUIBuilder.Instance.ShowScanHistory()
+///   2. Wire NavHistory button OnClick -> ScanHistoryUIBuilder.Instance.ShowScanHistory()
 ///   3. Assign targetCanvas in Inspector, or leave null to auto-find.
 ///
 /// DEPENDENCIES:
@@ -36,59 +36,72 @@ public class ScanHistoryUIBuilder : MonoBehaviour
     public bool useMockDataForDebugging = false;
 
     // ──────────────────────────────────────────────
-    //  Brand palette
+    //  Brand palette  (matches Prevention Tips screen)
     // ──────────────────────────────────────────────
-    static readonly Color AppBg         = HexColor("#F5F2EC");
-    static readonly Color HeaderBg      = HexColor("#2D5A3D");
-    static readonly Color HeaderBorder  = HexColor("#3A6E4D");
-    static readonly Color CardBg        = HexColor("#FFFFFF");
-    static readonly Color CardBorder    = HexColor("#C8DBC0");
+    static readonly Color AppBg          = HexColor("#F5F2EC");
+    static readonly Color HeaderBg       = HexColor("#2D5A3D");
+    static readonly Color HeaderBorder   = HexColor("#3A6E4D");
+    static readonly Color CardBg         = HexColor("#FFFFFF");
+    static readonly Color CardBorder     = HexColor("#C8DBC0");
 
-    static readonly Color TitleWhite    = HexColor("#FFFFFF");
-    static readonly Color SubtitleGreen = HexColor("#9FE1CB");
-    static readonly Color BackLabel     = HexColor("#9FE1CB");
-    static readonly Color CardDateColor = HexColor("#173404");
-    static readonly Color CardMetaColor = HexColor("#3B6D11");
-    static readonly Color ChevronColor  = HexColor("#639922");
+    static readonly Color TitleWhite     = HexColor("#FFFFFF");
+    static readonly Color SubtitleGreen  = HexColor("#9FE1CB");
+    static readonly Color BackLabel      = HexColor("#9FE1CB");
+    static readonly Color CardDateColor  = HexColor("#173404");
+    static readonly Color CardMetaColor  = HexColor("#3B6D11");
+    static readonly Color ChevronColor   = HexColor("#639922");
 
     // Badge colors
-    static readonly Color BadgeHighBg   = HexColor("#FAECE7");
-    static readonly Color BadgeHighText = HexColor("#993C1D");
-    static readonly Color BadgeMedBg    = HexColor("#FAEEDA");
-    static readonly Color BadgeMedText  = HexColor("#854F0B");
-    static readonly Color BadgeLowBg    = HexColor("#EAF3DE");
-    static readonly Color BadgeLowText  = HexColor("#3B6D11");
+    static readonly Color BadgeHighBg    = HexColor("#FAECE7");
+    static readonly Color BadgeHighText  = HexColor("#993C1D");
+    static readonly Color BadgeMedBg     = HexColor("#FAEEDA");
+    static readonly Color BadgeMedText   = HexColor("#854F0B");
+    static readonly Color BadgeLowBg     = HexColor("#EAF3DE");
+    static readonly Color BadgeLowText   = HexColor("#3B6D11");
 
     // Empty state
     static readonly Color EmptyIconColor = HexColor("#C8DBC0");
     static readonly Color EmptyTextColor = HexColor("#3B6D11");
 
     // ──────────────────────────────────────────────
+    //  Layout constants
+    // ──────────────────────────────────────────────
+    // Header height matches Prevention Tips screen header
+    const float HeaderHeight   = 148f;
+    // Side margin for cards (matches Prevention Tips card margins)
+    const float CardSideMargin = 20f;
+    // Vertical gap between cards
+    const float CardSpacing    = 12f;
+    // Inner padding inside each card
+    const float CardPadH       = 20f;  // horizontal
+    const float CardPadV       = 16f;  // vertical
+
+    // ──────────────────────────────────────────────
     //  Risk label sets
     // ──────────────────────────────────────────────
     static readonly HashSet<string> HighLabels = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        "ss_bromiliad"
+        "ss_tire", "ss_bucket", "ss_trashcan",
+        "ss_wheelbarrow", "ss_inflatablepool", "ss_grill"
     };
 
     static readonly HashSet<string> MedLabels = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        "ss_tire",
-        "ss_pot",
-        "ss_waterhyacinth",
-        "ss_waterlettuce",
-        "ss_trashcan",
-        "ss_grill"
+        "ss_birdbath", "ss_pot", "ss_wateringcan",
+        "ss_treehole", "ss_bromiliad", "ss_waterhyacinth", "ss_waterlettuce"
     };
 
     // ──────────────────────────────────────────────
     //  Private state
     // ──────────────────────────────────────────────
-    GameObject  _panel;
+    GameObject      _panel;
     TextMeshProUGUI _subtitleText;
-    Transform   _cardContainer;
-    GameObject  _emptyState;
-    bool        _built = false;
+    Transform       _cardContainer;
+    GameObject      _emptyState;
+    bool            _built = false;
+
+    // Rounded sprite loaded once (optional — falls back to square if missing)
+    Sprite _roundedSprite;
 
     // ══════════════════════════════════════════════
     //  Unity lifecycle
@@ -106,6 +119,10 @@ public class ScanHistoryUIBuilder : MonoBehaviour
 
     void Start()
     {
+        // Create the rounded-rect sprite once so cards and badges can have
+        // rounded corners without needing any new Unity editor assets.
+        LoadRoundedSprite();
+
         if (targetCanvas == null)
         {
             targetCanvas = FindObjectOfType<Canvas>();
@@ -129,6 +146,8 @@ public class ScanHistoryUIBuilder : MonoBehaviour
         {
             if (targetCanvas == null)
                 targetCanvas = FindObjectOfType<Canvas>();
+            // Create rounded sprite if Start() hasn't run yet.
+            LoadRoundedSprite();
             BuildPanel();
         }
 
@@ -199,7 +218,7 @@ public class ScanHistoryUIBuilder : MonoBehaviour
 
         _built = true;
 
-        // ── Root panel (full screen) ──────────────
+        // ── Root panel (full screen) ──────────────────────────
         _panel = new GameObject("ScanHistoryPanel");
         _panel.transform.SetParent(targetCanvas.transform, false);
 
@@ -212,362 +231,426 @@ public class ScanHistoryUIBuilder : MonoBehaviour
         Image panelBg = _panel.AddComponent<Image>();
         panelBg.color = AppBg;
 
-        // Sit on top of everything
         _panel.transform.SetAsLastSibling();
 
-        // ── Header ───────────────────────────────
         BuildHeader(_panel.transform);
-
-        // ── Scroll area ──────────────────────────
         BuildScrollArea(_panel.transform);
-
-        // ── Empty state ──────────────────────────
         BuildEmptyState(_panel.transform);
 
-        // Start hidden
         _panel.SetActive(false);
     }
 
+    // ──────────────────────────────────────────────
+    //  Header  (mirrors Prevention Tips header style)
+    // ──────────────────────────────────────────────
     void BuildHeader(Transform parent)
     {
-        // Header container
         GameObject header = CreateObject("Header", parent);
-        RectTransform headerRect = header.AddComponent<RectTransform>();
-        headerRect.anchorMin = new Vector2(0f, 1f);
-        headerRect.anchorMax = new Vector2(1f, 1f);
-        headerRect.pivot     = new Vector2(0.5f, 1f);
-        headerRect.sizeDelta = new Vector2(0f, 130f);
-        headerRect.anchoredPosition = Vector2.zero;
+
+        // Pin to top, full width, fixed height
+        RectTransform hr = header.AddComponent<RectTransform>();
+        hr.anchorMin        = new Vector2(0f, 1f);
+        hr.anchorMax        = new Vector2(1f, 1f);
+        hr.pivot            = new Vector2(0.5f, 1f);
+        hr.anchoredPosition = Vector2.zero;
+        hr.sizeDelta        = new Vector2(0f, HeaderHeight);
 
         Image headerBg = header.AddComponent<Image>();
         headerBg.color = HeaderBg;
 
-        // Bottom border line
+        // Thin bottom border accent
         GameObject borderLine = CreateObject("HeaderBorder", header.transform);
-        RectTransform blRect = borderLine.AddComponent<RectTransform>();
-        blRect.anchorMin = new Vector2(0f, 0f);
-        blRect.anchorMax = new Vector2(1f, 0f);
-        blRect.pivot     = new Vector2(0.5f, 0f);
-        blRect.sizeDelta = new Vector2(0f, 2f);
+        RectTransform blRect  = borderLine.AddComponent<RectTransform>();
+        blRect.anchorMin        = new Vector2(0f, 0f);
+        blRect.anchorMax        = new Vector2(1f, 0f);
+        blRect.pivot            = new Vector2(0.5f, 0f);
         blRect.anchoredPosition = Vector2.zero;
-        Image blImg = borderLine.AddComponent<Image>();
-        blImg.color = HeaderBorder;
+        blRect.sizeDelta        = new Vector2(0f, 2f);
+        borderLine.AddComponent<Image>().color = HeaderBorder;
 
-        // Vertical layout inside header
-        VerticalLayoutGroup vlg = header.AddComponent<VerticalLayoutGroup>();
-        vlg.padding           = new RectOffset(22, 22, 12, 14);
-        vlg.spacing           = 2f;
-        vlg.childAlignment    = TextAnchor.LowerLeft;
-        vlg.childControlWidth = true;
-        vlg.childControlHeight= false;
-        vlg.childForceExpandWidth  = true;
-        vlg.childForceExpandHeight = false;
+        // ── Back button row  (top of header) ─────────────────
+        // Positioned manually so it sits near the safe-area top
+        // and the title/subtitle can breathe in the lower portion.
 
-        ContentSizeFitter csf = header.AddComponent<ContentSizeFitter>();
-        csf.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
+        GameObject backBtn         = CreateObject("BackButton", header.transform);
+        RectTransform backBtnRect  = backBtn.AddComponent<RectTransform>();
+        backBtnRect.anchorMin      = new Vector2(0f, 1f);
+        backBtnRect.anchorMax      = new Vector2(0.6f, 1f);
+        backBtnRect.pivot          = new Vector2(0f, 1f);
+        backBtnRect.anchoredPosition = new Vector2(CardSideMargin, -18f);
+        backBtnRect.sizeDelta      = new Vector2(0f, 28f);
 
-        // ← Menu back button
-        GameObject backBtn = CreateObject("BackButton", header.transform);
-        LayoutElement backLE = backBtn.AddComponent<LayoutElement>();
-        backLE.preferredHeight = 22f;
-        backLE.flexibleWidth   = 1f;
+        Image backHitImg            = backBtn.AddComponent<Image>();
+        backHitImg.color            = Color.clear;
+        backHitImg.raycastTarget    = true;
 
-        Button backButton = backBtn.AddComponent<Button>();
-        Image backImg = backBtn.AddComponent<Image>();
-        backImg.color = Color.clear;
-        ColorBlock cb = backButton.colors;
-        cb.highlightedColor = new Color(1f, 1f, 1f, 0.08f);
-        backButton.colors   = cb;
+        Button backButton           = backBtn.AddComponent<Button>();
+        backButton.targetGraphic    = backHitImg;
+        ColorBlock bcb              = backButton.colors;
+        bcb.normalColor             = Color.white;
+        bcb.highlightedColor        = new Color(1f, 1f, 1f, 0.12f);
+        bcb.pressedColor            = new Color(1f, 1f, 1f, 0.20f);
+        backButton.colors           = bcb;
         backButton.onClick.AddListener(HideScanHistory);
 
-        TextMeshProUGUI backLabel = CreateTMP("BackLabel", backBtn.transform);
-        RectTransform blabelRect  = backLabel.GetComponent<RectTransform>();
-        blabelRect.anchorMin      = Vector2.zero;
-        blabelRect.anchorMax      = Vector2.one;
-        blabelRect.offsetMin      = Vector2.zero;
-        blabelRect.offsetMax      = Vector2.zero;
-        backLabel.text            = "← Menu";
-        backLabel.fontSize        = 14f;
-        backLabel.color           = BackLabel;
-        backLabel.alignment       = TextAlignmentOptions.BottomLeft;
-        backLabel.fontStyle       = FontStyles.Normal;
+        TextMeshProUGUI backLabel   = CreateTMP("BackLabel", backBtn.transform);
+        RectTransform blr           = backLabel.GetComponent<RectTransform>();
+        blr.anchorMin               = Vector2.zero;
+        blr.anchorMax               = Vector2.one;
+        blr.offsetMin               = Vector2.zero;
+        blr.offsetMax               = Vector2.zero;
+        backLabel.text              = "← Menu";
+        backLabel.fontSize          = 15f;
+        backLabel.color             = BackLabel;
+        backLabel.alignment         = TextAlignmentOptions.MidlineLeft;
+        backLabel.fontStyle         = FontStyles.Normal;
+        backLabel.raycastTarget     = false;
 
-        // Title
-        TextMeshProUGUI title = CreateTMP("Title", header.transform);
-        LayoutElement titleLE = title.GetComponent<RectTransform>().gameObject.AddComponent<LayoutElement>();
-        titleLE.preferredHeight = 40f;
-        titleLE.flexibleWidth   = 1f;
-        title.text      = "Scan history";
-        title.fontSize  = 30f;
-        title.color     = TitleWhite;
-        title.fontStyle = FontStyles.Bold;
-        title.alignment = TextAlignmentOptions.BottomLeft;
+        // ── Title ─────────────────────────────────────────────
+        // Sits in the lower 60 % of the header, left-aligned with same margin
+        TextMeshProUGUI title       = CreateTMP("Title", header.transform);
+        RectTransform titleRect     = title.GetComponent<RectTransform>();
+        titleRect.anchorMin         = new Vector2(0f, 0f);
+        titleRect.anchorMax         = new Vector2(1f, 1f);
+        titleRect.offsetMin         = new Vector2(CardSideMargin, 36f);
+        titleRect.offsetMax         = new Vector2(-CardSideMargin, -52f);
+        title.text                  = "Scan history";
+        title.fontSize              = 32f;
+        title.color                 = TitleWhite;
+        title.fontStyle             = FontStyles.Bold;
+        title.alignment             = TextAlignmentOptions.BottomLeft;
+        title.enableWordWrapping    = false;
+        title.raycastTarget         = false;
 
-        // Subtitle
-        _subtitleText = CreateTMP("Subtitle", header.transform);
-        LayoutElement subLE = _subtitleText.GetComponent<RectTransform>().gameObject.AddComponent<LayoutElement>();
-        subLE.preferredHeight = 20f;
-        subLE.flexibleWidth   = 1f;
-        _subtitleText.text      = "0 scans recorded";
-        _subtitleText.fontSize  = 14f;
-        _subtitleText.color     = SubtitleGreen;
-        _subtitleText.alignment = TextAlignmentOptions.BottomLeft;
+        // ── Subtitle ──────────────────────────────────────────
+        _subtitleText               = CreateTMP("Subtitle", header.transform);
+        RectTransform subRect       = _subtitleText.GetComponent<RectTransform>();
+        subRect.anchorMin           = new Vector2(0f, 0f);
+        subRect.anchorMax           = new Vector2(1f, 0f);
+        subRect.pivot               = new Vector2(0f, 0f);
+        subRect.anchoredPosition    = new Vector2(CardSideMargin, 14f);
+        subRect.sizeDelta           = new Vector2(-CardSideMargin * 2f, 22f);
+        _subtitleText.text          = "0 scans recorded";
+        _subtitleText.fontSize      = 14f;
+        _subtitleText.color         = SubtitleGreen;
+        _subtitleText.alignment     = TextAlignmentOptions.BottomLeft;
+        _subtitleText.raycastTarget = false;
     }
 
+    // ──────────────────────────────────────────────
+    //  Scroll area
+    // ──────────────────────────────────────────────
     void BuildScrollArea(Transform parent)
     {
-        // ScrollRect viewport
-        GameObject scrollObj = CreateObject("ScrollView", parent);
-        RectTransform scrollRect = scrollObj.AddComponent<RectTransform>();
+        GameObject scrollObj        = CreateObject("ScrollView", parent);
+        RectTransform scrollRect    = scrollObj.AddComponent<RectTransform>();
         scrollRect.anchorMin        = new Vector2(0f, 0f);
         scrollRect.anchorMax        = new Vector2(1f, 1f);
-        scrollRect.offsetMin        = new Vector2(0f,  0f);
-        scrollRect.offsetMax        = new Vector2(0f, -130f); // leave room for header
+        scrollRect.offsetMin        = new Vector2(0f, 0f);
+        scrollRect.offsetMax        = new Vector2(0f, -HeaderHeight);
 
-        ScrollRect sr = scrollObj.AddComponent<ScrollRect>();
-        sr.horizontal       = false;
-        sr.vertical         = true;
-        sr.scrollSensitivity= 30f;
-        sr.movementType     = ScrollRect.MovementType.Elastic;
+        ScrollRect sr               = scrollObj.AddComponent<ScrollRect>();
+        sr.horizontal               = false;
+        sr.vertical                 = true;
+        sr.scrollSensitivity        = 40f;
+        sr.movementType             = ScrollRect.MovementType.Elastic;
+        sr.elasticity               = 0.1f;
+        sr.inertia                  = true;
+        sr.decelerationRate         = 0.135f;
 
         // Viewport
-        GameObject viewport = CreateObject("Viewport", scrollObj.transform);
-        RectTransform vpRect = viewport.AddComponent<RectTransform>();
-        vpRect.anchorMin = Vector2.zero;
-        vpRect.anchorMax = Vector2.one;
-        vpRect.offsetMin = Vector2.zero;
-        vpRect.offsetMax = Vector2.zero;
-        Image viewportImg = viewport.AddComponent<Image>();
-        viewportImg.color = new Color(0f, 0f, 0f, 0.01f);
+        GameObject viewport         = CreateObject("Viewport", scrollObj.transform);
+        RectTransform vpRect        = viewport.AddComponent<RectTransform>();
+        vpRect.anchorMin            = Vector2.zero;
+        vpRect.anchorMax            = Vector2.one;
+        vpRect.offsetMin            = Vector2.zero;
+        vpRect.offsetMax            = Vector2.zero;
 
-        Mask viewportMask = viewport.AddComponent<Mask>();
-        viewportMask.showMaskGraphic = false;
+        // IMPORTANT: Mask graphics cannot be fully transparent in some Unity UI setups.
+        // A tiny alpha keeps the mask working without making the viewport visible.
+        Image vpImg                 = viewport.AddComponent<Image>();
+        vpImg.color                 = new Color(0f, 0f, 0f, 0.01f);
+
+        Mask vpMask                 = viewport.AddComponent<Mask>();
+        vpMask.showMaskGraphic      = false;
 
         // Content container
-        GameObject content = CreateObject("Content", viewport.transform);
-        RectTransform contentRect = content.AddComponent<RectTransform>();
-        contentRect.anchorMin = new Vector2(0f, 1f);
-        contentRect.anchorMax = new Vector2(1f, 1f);
-        contentRect.pivot     = new Vector2(0.5f, 1f);
-        contentRect.offsetMin = Vector2.zero;
-        contentRect.offsetMax = Vector2.zero;
+        GameObject content          = CreateObject("Content", viewport.transform);
+        RectTransform contentRect   = content.AddComponent<RectTransform>();
+        contentRect.anchorMin       = new Vector2(0f, 1f);
+        contentRect.anchorMax       = new Vector2(1f, 1f);
+        contentRect.pivot           = new Vector2(0.5f, 1f);
+        contentRect.offsetMin       = Vector2.zero;
+        contentRect.offsetMax       = Vector2.zero;
 
-        VerticalLayoutGroup vlg = content.AddComponent<VerticalLayoutGroup>();
-        vlg.padding           = new RectOffset(20, 20, 16, 24);
-        vlg.spacing           = 12f;
-        vlg.childAlignment    = TextAnchor.UpperCenter;
-        vlg.childControlWidth = true;
-        vlg.childControlHeight= true;
-        vlg.childForceExpandWidth  = true;
-        vlg.childForceExpandHeight = false;
+        VerticalLayoutGroup vlg     = content.AddComponent<VerticalLayoutGroup>();
+        vlg.padding                 = new RectOffset(
+            (int)CardSideMargin,
+            (int)CardSideMargin,
+            20,
+            32
+        );
+        vlg.spacing                 = CardSpacing;
+        vlg.childAlignment          = TextAnchor.UpperCenter;
+        vlg.childControlWidth       = true;
+        vlg.childControlHeight      = true;
+        vlg.childForceExpandWidth   = true;
+        vlg.childForceExpandHeight  = false;
 
-        ContentSizeFitter csf = content.AddComponent<ContentSizeFitter>();
-        csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        ContentSizeFitter csf       = content.AddComponent<ContentSizeFitter>();
+        csf.verticalFit             = ContentSizeFitter.FitMode.PreferredSize;
 
-        sr.viewport = vpRect;
-        sr.content  = contentRect;
+        sr.viewport                 = vpRect;
+        sr.content                  = contentRect;
 
-        _cardContainer = content.transform;
+        _cardContainer              = content.transform;
     }
 
+    // ──────────────────────────────────────────────
+    //  Empty state
+    // ──────────────────────────────────────────────
     void BuildEmptyState(Transform parent)
     {
-        _emptyState = CreateObject("EmptyState", parent);
-        RectTransform eRect = _emptyState.AddComponent<RectTransform>();
-        eRect.anchorMin        = new Vector2(0f, 0f);
-        eRect.anchorMax        = new Vector2(1f, 1f);
-        eRect.offsetMin        = new Vector2(0f,   0f);
-        eRect.offsetMax        = new Vector2(0f, -130f);
+        _emptyState                 = CreateObject("EmptyState", parent);
+        RectTransform eRect         = _emptyState.AddComponent<RectTransform>();
+        eRect.anchorMin             = new Vector2(0f, 0f);
+        eRect.anchorMax             = new Vector2(1f, 1f);
+        eRect.offsetMin             = new Vector2(0f, 0f);
+        eRect.offsetMax             = new Vector2(0f, -HeaderHeight);
 
-        VerticalLayoutGroup vlg = _emptyState.AddComponent<VerticalLayoutGroup>();
-        vlg.childAlignment    = TextAnchor.MiddleCenter;
-        vlg.childControlWidth = true;
-        vlg.childControlHeight= true;
-        vlg.childForceExpandWidth  = false;
-        vlg.childForceExpandHeight = false;
-        vlg.spacing = 12f;
+        VerticalLayoutGroup vlg     = _emptyState.AddComponent<VerticalLayoutGroup>();
+        vlg.childAlignment          = TextAnchor.MiddleCenter;
+        vlg.childControlWidth       = true;
+        vlg.childControlHeight      = true;
+        vlg.childForceExpandWidth   = false;
+        vlg.childForceExpandHeight  = false;
+        vlg.spacing                 = 16f;
+        vlg.padding                 = new RectOffset(40, 40, 0, 0);
 
-        // Icon (simple mosquito / droplet placeholder as text glyph)
-        TextMeshProUGUI icon = CreateTMP("EmptyIcon", _emptyState.transform);
-        icon.text      = "○";        // neutral circle; swap for a sprite/glyph if desired
-        icon.fontSize  = 56f;
-        icon.color     = EmptyIconColor;
-        icon.alignment = TextAlignmentOptions.Center;
+        // Large soft circle placeholder icon
+        GameObject iconHolder       = CreateObject("EmptyIconHolder", _emptyState.transform);
+        LayoutElement iconLE        = iconHolder.AddComponent<LayoutElement>();
+        iconLE.preferredWidth       = 72f;
+        iconLE.preferredHeight      = 72f;
+        iconLE.flexibleWidth        = 0f;
+
+        Image iconCircle            = iconHolder.AddComponent<Image>();
+        iconCircle.color            = HexColor("#E8F0E4");
+        if (_roundedSprite != null)
+        {
+            iconCircle.sprite       = _roundedSprite;
+            iconCircle.type         = Image.Type.Sliced;
+        }
+
+        TextMeshProUGUI iconGlyph   = CreateTMP("IconGlyph", iconHolder.transform);
+        RectTransform igRect        = iconGlyph.GetComponent<RectTransform>();
+        igRect.anchorMin            = Vector2.zero;
+        igRect.anchorMax            = Vector2.one;
+        igRect.offsetMin            = Vector2.zero;
+        igRect.offsetMax            = Vector2.zero;
+        iconGlyph.text              = "-";
+        iconGlyph.fontSize          = 36f;
+        iconGlyph.color             = EmptyIconColor;
+        iconGlyph.alignment         = TextAlignmentOptions.Center;
 
         // Message
-        TextMeshProUGUI msg = CreateTMP("EmptyMessage", _emptyState.transform);
-        msg.text      = "No scans yet — tap Begin Scan to check your yard.";
-        msg.fontSize  = 16f;
-        msg.color     = EmptyTextColor;
-        msg.alignment = TextAlignmentOptions.Center;
-        msg.enableWordWrapping = true;
-
-        RectTransform msgRect = msg.GetComponent<RectTransform>();
-        LayoutElement msgLE   = msg.gameObject.AddComponent<LayoutElement>();
-        msgLE.preferredWidth  = 260f;
+        TextMeshProUGUI msg         = CreateTMP("EmptyMessage", _emptyState.transform);
+        LayoutElement msgLE         = msg.gameObject.AddComponent<LayoutElement>();
+        msgLE.preferredWidth        = 280f;
+        msg.text                    = "No scans yet — tap Begin Scan to check your yard.";
+        msg.fontSize                = 16f;
+        msg.color                   = EmptyTextColor;
+        msg.alignment               = TextAlignmentOptions.Center;
+        msg.enableWordWrapping      = true;
 
         _emptyState.SetActive(false);
     }
 
     // ══════════════════════════════════════════════
-    //  Card creation
+    //  Card creation  (Prevention Tips card style)
     // ══════════════════════════════════════════════
 
     void CreateReportCard(ScanReport report)
     {
-        // Resolve risk level from detections
-        RiskLevel risk = ResolveRisk(report.id);
+        RiskLevel risk   = ResolveRisk(report.id);
+        string dateStr   = FormatDate(report.scanned_at);
+        string meta      = FormatMeta(report.duration_seconds, report.total_objects_detected);
 
-        // Format date
-        string dateStr = FormatDate(report.scanned_at);
+        // Fixed-height card. This is more reliable than ContentSizeFitter for
+        // dynamically generated cards because the parent VerticalLayoutGroup needs
+        // a clear preferred height to render each row. The height is kept compact to match the Prevention-style cards.
+        GameObject card             = CreateObject($"Card_{report.id}", _cardContainer);
+        RectTransform cardRect      = card.AddComponent<RectTransform>();
 
-        // Format meta
-        string meta = FormatMeta(report.duration_seconds, report.total_objects_detected);
+        LayoutElement cardLE        = card.AddComponent<LayoutElement>();
+        cardLE.preferredHeight      = 86f;
+        cardLE.minHeight            = 86f;
+        cardLE.flexibleWidth        = 1f;
 
-        // ── Card outer (handles border via a nested approach) ──
-        GameObject card = CreateObject($"Card_{report.id}", _cardContainer);
+        Image cardBorderImg         = card.AddComponent<Image>();
+        cardBorderImg.color         = CardBorder;
+        if (_roundedSprite != null)
+        {
+            cardBorderImg.sprite    = _roundedSprite;
+            cardBorderImg.type      = Image.Type.Sliced;
+        }
 
-        LayoutElement cardLE = card.AddComponent<LayoutElement>();
-        cardLE.preferredHeight = 76f;
-        cardLE.flexibleWidth   = 1f;
+        // White fill inset so the border stays visible.
+        GameObject cardInner        = CreateObject("CardInner", card.transform);
+        RectTransform innerRect     = cardInner.AddComponent<RectTransform>();
+        innerRect.anchorMin         = Vector2.zero;
+        innerRect.anchorMax         = Vector2.one;
+        innerRect.offsetMin         = new Vector2(1.5f, 1.5f);
+        innerRect.offsetMax         = new Vector2(-1.5f, -1.5f);
 
-        // Border image on the card root
-        Image cardBorderImg = card.AddComponent<Image>();
-        cardBorderImg.color  = CardBorder;
-        cardBorderImg.type   = Image.Type.Sliced;
+        Image innerImg              = cardInner.AddComponent<Image>();
+        innerImg.color              = CardBg;
+        if (_roundedSprite != null)
+        {
+            innerImg.sprite         = _roundedSprite;
+            innerImg.type           = Image.Type.Sliced;
+        }
 
-        // Rounded corners via sprite — fallback to solid if none available
-        // We'll simulate rounded card with a child white fill inset 1px
-        GameObject cardInner = CreateObject("CardInner", card.transform);
-        RectTransform innerRect = cardInner.AddComponent<RectTransform>();
-        innerRect.anchorMin = Vector2.zero;
-        innerRect.anchorMax = Vector2.one;
-        innerRect.offsetMin = new Vector2(1.5f, 1.5f);
-        innerRect.offsetMax = new Vector2(-1.5f, -1.5f);
+        Button btn                  = card.AddComponent<Button>();
+        btn.targetGraphic           = innerImg;
+        ColorBlock cb               = btn.colors;
+        cb.normalColor              = Color.white;
+        cb.highlightedColor         = new Color(0.96f, 0.99f, 0.96f, 1f);
+        cb.pressedColor             = new Color(0.90f, 0.96f, 0.90f, 1f);
+        cb.fadeDuration             = 0.08f;
+        btn.colors                  = cb;
 
-        Image innerImg = cardInner.AddComponent<Image>();
-        innerImg.color = CardBg;
-
-        // Button on card root
-        Button btn = card.AddComponent<Button>();
-        ColorBlock cb = btn.colors;
-        cb.normalColor      = Color.white;
-        cb.highlightedColor = new Color(0.95f, 0.98f, 0.95f, 1f);
-        cb.pressedColor     = new Color(0.88f, 0.94f, 0.88f, 1f);
-        btn.colors          = cb;
-        btn.targetGraphic   = innerImg;
-
-        int capturedId = report.id;
+        int capturedId              = report.id;
         btn.onClick.AddListener(() =>
         {
             HideScanHistory();
-
             if (ReportUIBuilder.Instance == null)
             {
-                Debug.LogWarning("[ScanHistoryUIBuilder] ReportUIBuilder.Instance is null. Cannot open report.");
+                Debug.LogWarning("[ScanHistoryUIBuilder] ReportUIBuilder.Instance is null.");
                 return;
             }
             ReportUIBuilder.Instance.ShowReport(capturedId);
         });
 
-        // ── Horizontal layout inside inner card ──
-        HorizontalLayoutGroup hlg = cardInner.AddComponent<HorizontalLayoutGroup>();
-        hlg.padding           = new RectOffset(16, 12, 0, 0);
-        hlg.spacing           = 8f;
-        hlg.childAlignment    = TextAnchor.MiddleLeft;
-        hlg.childControlWidth = false;
-        hlg.childControlHeight= true;
-        hlg.childForceExpandWidth  = false;
-        hlg.childForceExpandHeight = true;
+        // Date title
+        TextMeshProUGUI dateTMP     = CreateTMP("DateLabel", cardInner.transform);
+        RectTransform dateRect      = dateTMP.GetComponent<RectTransform>();
+        dateRect.anchorMin          = new Vector2(0f, 1f);
+        dateRect.anchorMax          = new Vector2(1f, 1f);
+        dateRect.pivot              = new Vector2(0f, 1f);
+        dateRect.offsetMin          = new Vector2(18f, -36f);
+        dateRect.offsetMax          = new Vector2(-158f, -10f);
+        dateTMP.text                = dateStr;
+        dateTMP.fontSize            = 16.5f;
+        dateTMP.color               = CardDateColor;
+        dateTMP.fontStyle           = FontStyles.Bold;
+        dateTMP.alignment           = TextAlignmentOptions.Left;
+        dateTMP.enableWordWrapping  = false;
 
-        // ── Left text column ──────────────────────
-        GameObject textCol = CreateObject("TextCol", cardInner.transform);
-        LayoutElement textLE = textCol.AddComponent<LayoutElement>();
-        textLE.flexibleWidth = 1f;
+        // Duration + item count
+        TextMeshProUGUI metaTMP     = CreateTMP("MetaLabel", cardInner.transform);
+        RectTransform metaRect      = metaTMP.GetComponent<RectTransform>();
+        metaRect.anchorMin          = new Vector2(0f, 1f);
+        metaRect.anchorMax          = new Vector2(1f, 1f);
+        metaRect.pivot              = new Vector2(0f, 1f);
+        metaRect.offsetMin          = new Vector2(18f, -59f);
+        metaRect.offsetMax          = new Vector2(-158f, -36f);
+        metaTMP.text                = meta;
+        metaTMP.fontSize            = 14f;
+        metaTMP.color               = CardMetaColor;
+        metaTMP.alignment           = TextAlignmentOptions.Left;
+        metaTMP.enableWordWrapping  = false;
 
-        VerticalLayoutGroup textVLG = textCol.AddComponent<VerticalLayoutGroup>();
-        textVLG.childAlignment    = TextAnchor.MiddleLeft;
-        textVLG.childControlWidth = true;
-        textVLG.childControlHeight= true;
-        textVLG.childForceExpandWidth  = true;
-        textVLG.childForceExpandHeight = false;
-        textVLG.spacing = 2f;
-        textVLG.padding = new RectOffset(0, 0, 0, 0);
 
-        TextMeshProUGUI dateTMP = CreateTMP("DateLabel", textCol.transform);
-        dateTMP.text      = dateStr;
-        dateTMP.fontSize  = 15f;
-        dateTMP.color     = CardDateColor;
-        dateTMP.fontStyle = FontStyles.Bold;
-        dateTMP.alignment = TextAlignmentOptions.Left;
+        // Risk badge centered vertically on the right, matching the cleaner mobile card style.
+        BuildBadge(cardInner.transform, risk);
 
-        TextMeshProUGUI metaTMP = CreateTMP("MetaLabel", textCol.transform);
-        metaTMP.text      = meta;
-        metaTMP.fontSize  = 13f;
-        metaTMP.color     = CardMetaColor;
-        metaTMP.alignment = TextAlignmentOptions.Left;
-
-        // ── Risk badge ────────────────────────────
-        GameObject badge = BuildBadge(cardInner.transform, risk);
-        LayoutElement badgeLE = badge.AddComponent<LayoutElement>();
-        badgeLE.preferredWidth  = 52f;
-        badgeLE.preferredHeight = 26f;
-        badgeLE.flexibleWidth   = 0f;
-
-        // ── Chevron ───────────────────────────────
-        TextMeshProUGUI chevron = CreateTMP("Chevron", cardInner.transform);
-        LayoutElement chevLE = chevron.gameObject.AddComponent<LayoutElement>();
-        chevLE.preferredWidth  = 18f;
-        chevLE.flexibleWidth   = 0f;
-        chevron.text      = "›";
-        chevron.fontSize  = 24f;
-        chevron.color     = ChevronColor;
-        chevron.alignment = TextAlignmentOptions.Center;
-        chevron.fontStyle = FontStyles.Bold;
+        // Chevron on the right.
+        TextMeshProUGUI chevron     = CreateTMP("Chevron", cardInner.transform);
+        RectTransform chevRect      = chevron.GetComponent<RectTransform>();
+        chevRect.anchorMin          = new Vector2(1f, 0.5f);
+        chevRect.anchorMax          = new Vector2(1f, 0.5f);
+        chevRect.pivot              = new Vector2(0.5f, 0.5f);
+        chevRect.anchoredPosition   = new Vector2(-20f, 0f);
+        chevRect.sizeDelta          = new Vector2(20f, 32f);
+        chevron.text                = "›";
+        chevron.fontSize            = 24f;
+        chevron.color               = ChevronColor;
+        chevron.alignment           = TextAlignmentOptions.Center;
+        chevron.fontStyle           = FontStyles.Normal;
+        chevron.enableWordWrapping  = false;
     }
 
-    GameObject BuildBadge(Transform parent, RiskLevel risk)
+    // ──────────────────────────────────────────────
+    //  Badge pill
+    // ──────────────────────────────────────────────
+    void BuildBadge(Transform parent, RiskLevel risk)
     {
         string label;
-        Color bgColor, textColor;
+        Color  bgColor, textColor;
 
         switch (risk)
         {
             case RiskLevel.High:
-                label = "High"; bgColor = BadgeHighBg; textColor = BadgeHighText;
-                break;
+                label = "High risk"; bgColor = BadgeHighBg; textColor = BadgeHighText; break;
             case RiskLevel.Med:
-                label = "Med";  bgColor = BadgeMedBg;  textColor = BadgeMedText;
-                break;
+                label = "Med risk";  bgColor = BadgeMedBg;  textColor = BadgeMedText;  break;
             default:
-                label = "Low";  bgColor = BadgeLowBg;  textColor = BadgeLowText;
-                break;
+                label = "Low risk";  bgColor = BadgeLowBg;  textColor = BadgeLowText;  break;
         }
 
-        GameObject badge = CreateObject($"Badge_{label}", parent);
+        GameObject badge            = CreateObject($"Badge_{label}", parent);
+        RectTransform badgeRect     = badge.AddComponent<RectTransform>();
+        badgeRect.anchorMin         = new Vector2(1f, 0.5f);
+        badgeRect.anchorMax         = new Vector2(1f, 0.5f);
+        badgeRect.pivot             = new Vector2(1f, 0.5f);
+        badgeRect.anchoredPosition  = new Vector2(-52f, 0f);
+        badgeRect.sizeDelta         = new Vector2(88f, 28f);
 
-        Image badgeImg = badge.AddComponent<Image>();
-        badgeImg.color = bgColor;
-        // Note: rounded pill corners require a rounded sprite; using solid fallback.
-        // In Unity, assign a rounded-rect sprite to badgeImg.sprite for the pill look.
+        // Subtle outer border so the badge feels more intentional and less like
+        // a plain template pill. The inner fill keeps the soft risk color.
+        Color borderColor           = textColor;
+        borderColor.a               = 0.20f;
 
-        TextMeshProUGUI badgeTMP = CreateTMP("BadgeText", badge.transform);
-        RectTransform btRect     = badgeTMP.GetComponent<RectTransform>();
-        btRect.anchorMin = Vector2.zero;
-        btRect.anchorMax = Vector2.one;
-        btRect.offsetMin = new Vector2(4f, 2f);
-        btRect.offsetMax = new Vector2(-4f, -2f);
-        badgeTMP.text      = label;
-        badgeTMP.fontSize  = 12f;
-        badgeTMP.color     = textColor;
-        badgeTMP.alignment = TextAlignmentOptions.Center;
-        badgeTMP.fontStyle = FontStyles.Bold;
+        Image badgeBorder           = badge.AddComponent<Image>();
+        badgeBorder.color           = borderColor;
+        if (_roundedSprite != null)
+        {
+            badgeBorder.sprite      = _roundedSprite;
+            badgeBorder.type        = Image.Type.Sliced;
+        }
 
-        return badge;
+        GameObject badgeFill        = CreateObject("BadgeFill", badge.transform);
+        RectTransform fillRect      = badgeFill.AddComponent<RectTransform>();
+        fillRect.anchorMin          = Vector2.zero;
+        fillRect.anchorMax          = Vector2.one;
+        fillRect.offsetMin          = new Vector2(1.2f, 1.2f);
+        fillRect.offsetMax          = new Vector2(-1.2f, -1.2f);
+
+        Image fillImg               = badgeFill.AddComponent<Image>();
+        fillImg.color               = bgColor;
+        if (_roundedSprite != null)
+        {
+            fillImg.sprite          = _roundedSprite;
+            fillImg.type            = Image.Type.Sliced;
+        }
+
+        TextMeshProUGUI badgeTMP    = CreateTMP("BadgeText", badgeFill.transform);
+        RectTransform btRect        = badgeTMP.GetComponent<RectTransform>();
+        btRect.anchorMin            = Vector2.zero;
+        btRect.anchorMax            = Vector2.one;
+        btRect.offsetMin            = new Vector2(6f, 1.5f);
+        btRect.offsetMax            = new Vector2(-6f, -1.5f);
+        badgeTMP.text               = label;
+        badgeTMP.fontSize           = 12.5f;
+        badgeTMP.color              = textColor;
+        badgeTMP.alignment          = TextAlignmentOptions.Center;
+        badgeTMP.fontStyle          = FontStyles.Bold;
+        badgeTMP.enableWordWrapping = false;
     }
 
     // ══════════════════════════════════════════════
-    //  Data helpers
+    //  Data helpers  (unchanged)
     // ══════════════════════════════════════════════
 
     List<ScanReport> FetchReports()
@@ -597,7 +680,7 @@ public class ScanHistoryUIBuilder : MonoBehaviour
         }
         catch (Exception e)
         {
-            Debug.LogWarning($"[ScanHistoryUIBuilder] Failed to get detections for report {reportId}: {e.Message}");
+            Debug.LogWarning($"[ScanHistoryUIBuilder] Failed to get detections for {reportId}: {e.Message}");
             return RiskLevel.Low;
         }
 
@@ -622,7 +705,7 @@ public class ScanHistoryUIBuilder : MonoBehaviour
     static string FormatDate(string scannedAt)
     {
         if (DateTime.TryParse(scannedAt, out DateTime dt))
-            return dt.ToString("MMMM d, yyyy");   // e.g. "June 7, 2026"
+            return dt.ToString("MMMM d, yyyy");
         return scannedAt ?? "Unknown date";
     }
 
@@ -639,11 +722,11 @@ public class ScanHistoryUIBuilder : MonoBehaviour
     {
         string durStr  = FormatDuration(durationSeconds);
         string itemStr = itemCount == 1 ? "1 item" : $"{itemCount} items";
-        return $"{durStr} • {itemStr}";
+        return $"{durStr} \u2022 {itemStr}";
     }
 
     // ══════════════════════════════════════════════
-    //  Mock data (debug only)
+    //  Mock data (debug only — useMockDataForDebugging = false by default)
     // ══════════════════════════════════════════════
 
     List<ScanReport> GetMockReports()
@@ -660,6 +743,69 @@ public class ScanHistoryUIBuilder : MonoBehaviour
     // ══════════════════════════════════════════════
     //  UI factory helpers
     // ══════════════════════════════════════════════
+
+    void LoadRoundedSprite()
+    {
+        if (_roundedSprite != null)
+        {
+            return;
+        }
+
+        // Generate the rounded rectangle at runtime so the card corners
+        // work even if the project does not already have a UI/Rounded sprite.
+        _roundedSprite = CreateRuntimeRoundedSprite(64, 18);
+    }
+
+    static Sprite CreateRuntimeRoundedSprite(int size, int radius)
+    {
+        Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        texture.name = "RuntimeRoundedRect";
+        texture.filterMode = FilterMode.Bilinear;
+        texture.wrapMode = TextureWrapMode.Clamp;
+
+        Color solid = Color.white;
+        Color clear = new Color(1f, 1f, 1f, 0f);
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float px = x + 0.5f;
+                float py = y + 0.5f;
+                bool inside = IsInsideRoundedRect(px, py, size, size, radius);
+                texture.SetPixel(x, y, inside ? solid : clear);
+            }
+        }
+
+        texture.Apply();
+
+        Vector4 border = new Vector4(radius, radius, radius, radius);
+        return Sprite.Create(
+            texture,
+            new Rect(0, 0, size, size),
+            new Vector2(0.5f, 0.5f),
+            100f,
+            0,
+            SpriteMeshType.FullRect,
+            border
+        );
+    }
+
+    static bool IsInsideRoundedRect(float x, float y, float width, float height, float radius)
+    {
+        float innerLeft = radius;
+        float innerRight = width - radius;
+        float innerBottom = radius;
+        float innerTop = height - radius;
+
+        float closestX = Mathf.Clamp(x, innerLeft, innerRight);
+        float closestY = Mathf.Clamp(y, innerBottom, innerTop);
+
+        float dx = x - closestX;
+        float dy = y - closestY;
+
+        return dx * dx + dy * dy <= radius * radius;
+    }
 
     static GameObject CreateObject(string name, Transform parent)
     {
