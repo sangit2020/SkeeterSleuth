@@ -4,6 +4,8 @@ using System.Collections.Generic;
 
 public class ScanManager : MonoBehaviour
 {
+    public static ScanManager Instance { get; private set; }
+
     [Header("UI References")]
     public GameObject beginScanButton;
     public GameObject scanningIndicator;
@@ -12,6 +14,8 @@ public class ScanManager : MonoBehaviour
     public TextMeshProUGUI scanDurationText;
     public TextMeshProUGUI itemsDetectedText;
     public TextMeshProUGUI mitigationPreviewText;
+    public GameObject hamburgerButton;
+    public GameObject scanStatusChip;
 
     [Header("Integration References")]
     [Tooltip("Optional. If left empty, ScanManager will try to find YOLOInference in the scene.")]
@@ -66,6 +70,11 @@ public class ScanManager : MonoBehaviour
         { "ss_wheelbarrow",    "Empty water and store the wheelbarrow upside down." }
     };
 
+    void Awake()
+    {
+        Instance = this;
+    }
+
     void Start()
     {
         if (yoloInference == null)
@@ -78,6 +87,9 @@ public class ScanManager : MonoBehaviour
 
         if (scanningIndicator != null)
             scanningIndicator.SetActive(false);
+
+        if (scanStatusChip != null)
+            scanStatusChip.SetActive(false);
     }
 
     public void OnBeginScanPressed()
@@ -97,6 +109,12 @@ public class ScanManager : MonoBehaviour
 
         if (scanCompletePanel != null)
             scanCompletePanel.SetActive(false);
+
+        if (hamburgerButton != null)
+            hamburgerButton.SetActive(false);
+
+        if (scanStatusChip != null)
+            scanStatusChip.SetActive(true);
 
         Debug.Log("[ScanManager] Scan started.");
     }
@@ -118,6 +136,12 @@ public class ScanManager : MonoBehaviour
 
         if (scanningIndicator != null)
             scanningIndicator.SetActive(false);
+
+        if (hamburgerButton != null)
+            hamburgerButton.SetActive(true);
+
+        if (scanStatusChip != null)
+            scanStatusChip.SetActive(false);
 
         ARPinManager pinManager = UnityEngine.Object.FindAnyObjectByType<ARPinManager>();
         if (pinManager != null)
@@ -236,6 +260,13 @@ public class ScanManager : MonoBehaviour
                 confidence = 0f
             };
         }
+    }
+
+    // Used by the Fix Sheet to show "X found this scan" for one specific label.
+    public int GetCountForLabel(string label)
+    {
+        string normalizedLabel = NormalizeLabel(label);
+        return detectedCounts.ContainsKey(normalizedLabel) ? detectedCounts[normalizedLabel] : 1;
     }
 
     private int SaveCurrentScanToDatabase(int durationSeconds)
@@ -372,6 +403,16 @@ public class ScanManager : MonoBehaviour
     public int GetLastSavedReportId()
     {
         return lastSavedReportId;
+    }
+
+    public int GetTotalDetectedCountPublic()
+    {
+        return GetTotalDetectedCount();
+    }
+
+    public float GetElapsedSeconds()
+    {
+        return Time.time - scanStartTime;
     }
 
     private int GetTotalDetectedCount()
