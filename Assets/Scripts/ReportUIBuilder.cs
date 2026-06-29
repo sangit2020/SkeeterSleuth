@@ -53,6 +53,10 @@ public class ReportUIBuilder : MonoBehaviour
     static readonly Color C_BTN_FILLED_TEXT = HexColor("#143220"); // Filled button text
     static readonly Color C_DIVIDER        = HexColor("#386C4B"); // Divider line
 
+    // Runtime rounded-rectangle fallback. This makes cards/badges round even if
+    // the project does not have a Resources/UI/Rounded sprite assigned.
+    static readonly Dictionary<int, Sprite> _runtimeRoundedSprites = new Dictionary<int, Sprite>();
+
     GameObject _reportListPanel;
     GameObject _itemDetailPanel;
 
@@ -64,9 +68,7 @@ public class ReportUIBuilder : MonoBehaviour
     TextMeshProUGUI _listScanItems;
     TextMeshProUGUI _listRiskBadgeText;
     Image _listRiskBadgeBg;
-    TextMeshProUGUI _listRiskExplanation;
-    Image[] _listRiskSegmentBg = new Image[3];
-    TextMeshProUGUI[] _listRiskSegmentText = new TextMeshProUGUI[3];
+    Image _listRiskBarFill;
     GameObject _listRiskSummaryCard;
     GameObject _listScanInfoCard;
 
@@ -211,8 +213,15 @@ public class ReportUIBuilder : MonoBehaviour
         _currentReport = null;
         _currentDetections = new List<DetectionWithDetails>();
 
-        _listRiskSummaryCard.SetActive(false);
-        _listScanInfoCard.SetActive(false);
+        if (_listRiskSummaryCard != null)
+        {
+            _listRiskSummaryCard.SetActive(false);
+        }
+
+        if (_listScanInfoCard != null)
+        {
+            _listScanInfoCard.SetActive(false);
+        }
 
         foreach (Transform child in _listItemsContainer)
         {
@@ -234,8 +243,14 @@ public class ReportUIBuilder : MonoBehaviour
     void PopulateReportListPanel()
     {
         _listEmptyMessage.gameObject.SetActive(false);
-        _listRiskSummaryCard.SetActive(true);
-        _listScanInfoCard.SetActive(true);
+
+        if (_listRiskSummaryCard != null)
+        {
+            _listRiskSummaryCard.SetActive(true);
+        }
+
+        // Scan Info was intentionally removed from the report summary screen.
+        // The header already contains the date, duration, and item count.
 
         DateTime dt = ParseDate(_currentReport.scanned_at);
         int mins = _currentReport.duration_seconds / 60;
@@ -245,11 +260,7 @@ public class ReportUIBuilder : MonoBehaviour
         _listReportSubtitle.text =
             dt.ToString("MMMM d") + " • " + dur + " • " + _currentReport.total_objects_detected + " items found";
 
-        _listScanDate.text = dt.ToString("MMMM d, yyyy");
-        _listScanDuration.text = dur;
-        _listScanItems.text = _currentReport.total_objects_detected + " total";
-
-        // ── Risk summary: pill badge + explanation + segmented indicator ──
+        // ── Risk summary: badge + progress-style risk bar ──
         string overallRisk = ComputeOverallRisk(_currentDetections);
         var (badgeBg, badgeText) = RiskBadgeColors(overallRisk);
 
@@ -257,36 +268,22 @@ public class ReportUIBuilder : MonoBehaviour
         _listRiskBadgeBg.color = badgeBg;
         _listRiskBadgeText.color = badgeText;
 
-        int detectedCount = _currentReport.total_objects_detected;
-
-        _listRiskExplanation.text =
-            "Based on " + detectedCount + " detected mosquito breeding risk" +
-            (detectedCount == 1 ? "" : "s") + ".";
-
-        int activeSegment = overallRisk switch
+        float fillAmount = overallRisk switch
         {
-            "High" => 2,
-            "Moderate" => 1,
-            _ => 0
+            "High" => 1.0f,
+            "Moderate" => 0.6667f,
+            _ => 0.3334f
         };
 
-        string[] segmentRiskKeys = { "Low", "Moderate", "High" };
-
-        for (int i = 0; i < 3; i++)
+        if (_listRiskBarFill != null)
         {
-            if (i == activeSegment)
-            {
-                var (segBg, segText) = RiskBadgeColors(segmentRiskKeys[i]);
-                _listRiskSegmentBg[i].color = segBg;
-                _listRiskSegmentText[i].color = segText;
-                _listRiskSegmentText[i].fontStyle = FontStyles.Bold;
-            }
-            else
-            {
-                _listRiskSegmentBg[i].color = C_RISK_BAR_BG;
-                _listRiskSegmentText[i].color = C_SUBTEXT;
-                _listRiskSegmentText[i].fontStyle = FontStyles.Normal;
-            }
+            _listRiskBarFill.color = badgeText;
+
+            RectTransform fillRect = _listRiskBarFill.GetComponent<RectTransform>();
+            fillRect.anchorMin = new Vector2(0f, 0f);
+            fillRect.anchorMax = new Vector2(fillAmount, 1f);
+            fillRect.offsetMin = Vector2.zero;
+            fillRect.offsetMax = Vector2.zero;
         }
 
         foreach (Transform child in _listItemsContainer)
@@ -375,41 +372,57 @@ public class ReportUIBuilder : MonoBehaviour
         _detailRiskBadgeText.color = riskText;
     }
 
-    void BuildReportListPanel()
+
+    // Full-width fixed header used by report screens.
+    // Built outside the ScrollRect so the green header reaches the screen edges
+    // instead of inheriting the scroll content's side padding.
+    void MakeFixedHeader(
+        string name,
+        RectTransform root,
+        string backLabel,
+        Action backAction,
+        string titleText,
+        out TextMeshProUGUI titleRef,
+        out TextMeshProUGUI subtitleRef
+    )
     {
-        Transform canvasTransform = targetCanvas.transform;
+        var hBlock = new GameObject(name, typeof(RectTransform), typeof(Image));
+        hBlock.transform.SetParent(root, false);
 
-        _reportListPanel = CreateFullScreenPanel("FullReportPanel_Built", canvasTransform, C_BG);
-        RectTransform root = _reportListPanel.GetComponent<RectTransform>();
-
-        Transform scroll = CreateScrollView("ReportScroll", root);
-        RectTransform content = scroll.Find("Viewport/Content").GetComponent<RectTransform>();
-
-        var hBlock = MakeLayoutBlock("Header", content, 135, C_HEADER_BG);
         RectTransform hRect = hBlock.GetComponent<RectTransform>();
+        hRect.anchorMin = new Vector2(0, 1);
+        hRect.anchorMax = new Vector2(1, 1);
+        hRect.pivot = new Vector2(0.5f, 1f);
+        hRect.offsetMin = new Vector2(0, -135);
+        hRect.offsetMax = new Vector2(0, 0);
+
+        hBlock.GetComponent<Image>().color = C_HEADER_BG;
+
+        float backWidth = backLabel.Length > 8 ? 135f : 95f;
 
         var backBtn = MakeButton(
             "BackBtn",
             hRect,
-            "← Back",
+            backLabel,
             C_SUBTEXT,
             15,
             new Vector2(0, 1),
             new Vector2(0, 1),
-            new Vector2(0, -58),
-            new Vector2(95, 30),
+            // Moved slightly up and left so the back control sits closer to the top-left safe area.
+            new Vector2(10, -48),
+            new Vector2(10 + backWidth, -18),
             Color.clear
         );
 
         backBtn.GetComponent<Button>().onClick.AddListener(() =>
         {
-            _reportListPanel.SetActive(false);
+            backAction?.Invoke();
         });
 
-        MakeText(
+        titleRef = MakeText(
             "TitleText",
             hRect,
-            "Full report",
+            titleText,
             31,
             C_TEXT_PRIMARY,
             FontStyles.Bold,
@@ -419,7 +432,7 @@ public class ReportUIBuilder : MonoBehaviour
             new Vector2(-24, -58)
         );
 
-        _listReportSubtitle = MakeText(
+        subtitleRef = MakeText(
             "SubtitleText",
             hRect,
             "",
@@ -431,6 +444,34 @@ public class ReportUIBuilder : MonoBehaviour
             new Vector2(24, -127),
             new Vector2(-24, -100)
         );
+    }
+
+    void BuildReportListPanel()
+    {
+        Transform canvasTransform = targetCanvas.transform;
+
+        _reportListPanel = CreateFullScreenPanel("FullReportPanel_Built", canvasTransform, C_BG);
+        RectTransform root = _reportListPanel.GetComponent<RectTransform>();
+
+        TextMeshProUGUI unusedTitle;
+        MakeFixedHeader(
+            "Header",
+            root,
+            "← Back",
+            () =>
+            {
+                _reportListPanel.SetActive(false);
+            },
+            "Full report",
+            out unusedTitle,
+            out _listReportSubtitle
+        );
+
+        Transform scroll = CreateScrollView("ReportScroll", root);
+        RectTransform scrollRect = scroll.GetComponent<RectTransform>();
+        scrollRect.offsetMax = new Vector2(0, -135);
+
+        RectTransform content = scroll.Find("Viewport/Content").GetComponent<RectTransform>();
 
         var emptyGo = new GameObject(
             "EmptyStateLabel",
@@ -456,20 +497,43 @@ public class ReportUIBuilder : MonoBehaviour
         // ─────────────────────────────────────────────────────────────────
         MakeSectionLabel("RISK SUMMARY", content);
 
-        _listRiskSummaryCard = MakeCard("RiskSummaryCard", content, 140);
-        RectTransform riskRect = _listRiskSummaryCard.GetComponent<RectTransform>();
+        // Wrap the risk card in a padded holder so it lines up with the detected item cards.
+        // The detected items container has 20px left/right padding, so this wrapper gives
+        // Risk Summary the same visual width without changing the spacing of the whole page.
+        var riskCardWrapper = new GameObject(
+            "RiskSummaryCardWrapper",
+            typeof(RectTransform),
+            typeof(LayoutElement),
+            typeof(HorizontalLayoutGroup)
+        );
+
+        riskCardWrapper.transform.SetParent(content, false);
+        riskCardWrapper.GetComponent<LayoutElement>().preferredHeight = 82;
+
+        var riskWrapperLayout = riskCardWrapper.GetComponent<HorizontalLayoutGroup>();
+        riskWrapperLayout.padding = new RectOffset(20, 20, 0, 0);
+        riskWrapperLayout.childControlWidth = true;
+        riskWrapperLayout.childControlHeight = true;
+        riskWrapperLayout.childForceExpandWidth = true;
+        riskWrapperLayout.childForceExpandHeight = true;
+
+        _listRiskSummaryCard = riskCardWrapper;
+
+        var riskCard = MakeCard("RiskSummaryCard", riskCardWrapper.transform, 82);
+        riskCard.GetComponent<LayoutElement>().flexibleWidth = 1;
+        RectTransform riskRect = riskCard.GetComponent<RectTransform>();
 
         var overallLabel = MakeText(
             "OverallLabel",
             riskRect,
             "Overall risk level",
-            16,
+            13,
             C_TEXT_PRIMARY,
-            FontStyles.Normal,
+            FontStyles.Bold,
             new Vector2(0, 1),
             new Vector2(0, 1),
-            new Vector2(18, -50),
-            new Vector2(230, -16)
+            new Vector2(18, -30),
+            new Vector2(230, -8)
         );
         overallLabel.alignment = TextAlignmentOptions.Left;
 
@@ -480,82 +544,53 @@ public class ReportUIBuilder : MonoBehaviour
             C_MOD_BADGE_BG,
             C_MOD_BADGE_TEXT,
             new Vector2(1, 1),
-            new Vector2(-18, -16),
-            new Vector2(104, 34),
-            14
+            new Vector2(-18, -12),
+            new Vector2(104, 24),
+            12
         );
 
         _listRiskBadgeText = _listRiskBadgeBg.GetComponentInChildren<TextMeshProUGUI>();
 
-        _listRiskExplanation = MakeText(
-            "RiskExplanation",
-            riskRect,
-            "",
-            13,
-            C_SUBTEXT,
-            FontStyles.Normal,
-            new Vector2(0, 1),
-            new Vector2(1, 1),
-            new Vector2(18, -90),
-            new Vector2(-18, -54)
-        );
-        _listRiskExplanation.alignment = TextAlignmentOptions.TopLeft;
-        _listRiskExplanation.enableWordWrapping = true;
-
-        // Segmented Low / Med / High indicator — active level is highlighted.
-        var segmentsRow = new GameObject(
-            "RiskSegmentsRow",
+        // Progress risk bar:
+        // Low = 1/3 filled, Moderate = 2/3 filled, High = full.
+        var riskBarTrack = new GameObject(
+            "RiskBarTrack",
             typeof(RectTransform),
-            typeof(HorizontalLayoutGroup)
+            typeof(Image)
         );
 
-        segmentsRow.transform.SetParent(riskRect, false);
+        riskBarTrack.transform.SetParent(riskRect, false);
 
-        RectTransform segRowRect = segmentsRow.GetComponent<RectTransform>();
+        RectTransform trackRect = riskBarTrack.GetComponent<RectTransform>();
         SetAnchors(
-            segRowRect,
+            trackRect,
             new Vector2(0, 1),
             new Vector2(1, 1),
-            new Vector2(18, -124),
-            new Vector2(-18, -98)
+            new Vector2(18, -58),
+            new Vector2(-18, -48)
         );
 
-        var segHlg = segmentsRow.GetComponent<HorizontalLayoutGroup>();
-        segHlg.spacing = 8;
-        segHlg.childControlWidth = true;
-        segHlg.childControlHeight = true;
-        segHlg.childForceExpandWidth = true;
-        segHlg.childForceExpandHeight = true;
+        Image trackImg = riskBarTrack.GetComponent<Image>();
+        trackImg.color = C_RISK_BAR_BG;
+        SetRounded(trackImg, 5);
 
-        string[] segmentLabels = { "Low", "Med", "High" };
+        var riskBarFill = new GameObject(
+            "RiskBarFill",
+            typeof(RectTransform),
+            typeof(Image)
+        );
 
-        for (int i = 0; i < 3; i++)
-        {
-            var seg = new GameObject("RiskSegment_" + segmentLabels[i], typeof(RectTransform), typeof(Image));
-            seg.transform.SetParent(segmentsRow.transform, false);
+        riskBarFill.transform.SetParent(riskBarTrack.transform, false);
 
-            Image segImg = seg.GetComponent<Image>();
-            segImg.color = C_RISK_BAR_BG;
-            SetRounded(segImg, 8);
+        RectTransform fillRect = riskBarFill.GetComponent<RectTransform>();
+        fillRect.anchorMin = new Vector2(0f, 0f);
+        fillRect.anchorMax = new Vector2(0.6667f, 1f);
+        fillRect.offsetMin = Vector2.zero;
+        fillRect.offsetMax = Vector2.zero;
 
-            _listRiskSegmentBg[i] = segImg;
-
-            var segTextGo = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
-            segTextGo.transform.SetParent(seg.transform, false);
-
-            RectTransform stRect = segTextGo.GetComponent<RectTransform>();
-            stRect.anchorMin = Vector2.zero;
-            stRect.anchorMax = Vector2.one;
-            stRect.sizeDelta = Vector2.zero;
-
-            TextMeshProUGUI stTm = segTextGo.GetComponent<TextMeshProUGUI>();
-            stTm.text = segmentLabels[i];
-            stTm.fontSize = 12;
-            stTm.color = C_SUBTEXT;
-            stTm.alignment = TextAlignmentOptions.Center;
-
-            _listRiskSegmentText[i] = stTm;
-        }
+        _listRiskBarFill = riskBarFill.GetComponent<Image>();
+        _listRiskBarFill.color = C_MOD_BADGE_TEXT;
+        SetRounded(_listRiskBarFill, 5);
 
         // ─────────────────────────────────────────────────────────────────
         // DETECTED ITEMS
@@ -590,20 +625,6 @@ public class ReportUIBuilder : MonoBehaviour
 
         _listItemsContainer = itemsHolder.transform;
 
-        // ─────────────────────────────────────────────────────────────────
-        // SCAN INFO
-        // ─────────────────────────────────────────────────────────────────
-        MakeSectionLabel("SCAN INFO", content);
-
-        _listScanInfoCard = MakeCard("ScanInfoCard", content, 140);
-        RectTransform infoRect = _listScanInfoCard.GetComponent<RectTransform>();
-
-        BuildInfoRow(infoRect, "Date", ref _listScanDate, -20);
-        AddDivider(infoRect, -50);
-        BuildInfoRow(infoRect, "Duration", ref _listScanDuration, -60);
-        AddDivider(infoRect, -90);
-        BuildInfoRow(infoRect, "Items found", ref _listScanItems, -100);
-
         var spacer = new GameObject("BottomSpacer", typeof(RectTransform), typeof(LayoutElement));
         spacer.transform.SetParent(content, false);
         spacer.GetComponent<LayoutElement>().preferredHeight = 55;
@@ -616,59 +637,25 @@ public class ReportUIBuilder : MonoBehaviour
         _itemDetailPanel = CreateFullScreenPanel("ItemDetailPanel_Built", canvasTransform, C_BG);
         RectTransform root = _itemDetailPanel.GetComponent<RectTransform>();
 
-        Transform scroll = CreateScrollView("DetailScroll", root);
-        RectTransform content = scroll.Find("Viewport/Content").GetComponent<RectTransform>();
-
-        // ─────────────────────────────────────────────────────────────────
-        // HEADER
-        // ─────────────────────────────────────────────────────────────────
-        var hBlock = MakeLayoutBlock("Header", content, 135, C_HEADER_BG);
-        RectTransform hRect = hBlock.GetComponent<RectTransform>();
-
-        var backBtn = MakeButton(
-            "BackBtn",
-            hRect,
+        MakeFixedHeader(
+            "Header",
+            root,
             "← Full report",
-            C_SUBTEXT,
-            14,
-            new Vector2(0, 1),
-            new Vector2(0, 1),
-            new Vector2(0, -58),
-            new Vector2(135, 30),
-            Color.clear
-        );
-
-        backBtn.GetComponent<Button>().onClick.AddListener(() =>
-        {
-            _itemDetailPanel.SetActive(false);
-            _reportListPanel.SetActive(true);
-        });
-
-        _detailTitle = MakeText(
-            "DetailTitle",
-            hRect,
+            () =>
+            {
+                _itemDetailPanel.SetActive(false);
+                _reportListPanel.SetActive(true);
+            },
             "",
-            31,
-            C_TEXT_PRIMARY,
-            FontStyles.Bold,
-            new Vector2(0, 1),
-            new Vector2(1, 1),
-            new Vector2(24, -96),
-            new Vector2(-24, -58)
+            out _detailTitle,
+            out _detailSubtitle
         );
 
-        _detailSubtitle = MakeText(
-            "DetailSubtitle",
-            hRect,
-            "",
-            15,
-            C_SUBTEXT,
-            FontStyles.Normal,
-            new Vector2(0, 1),
-            new Vector2(1, 1),
-            new Vector2(24, -127),
-            new Vector2(-24, -100)
-        );
+        Transform scroll = CreateScrollView("DetailScroll", root);
+        RectTransform scrollRect = scroll.GetComponent<RectTransform>();
+        scrollRect.offsetMax = new Vector2(0, -135);
+
+        RectTransform content = scroll.Find("Viewport/Content").GetComponent<RectTransform>();
 
         // ─────────────────────────────────────────────────────────────────
         // RISK LEVEL
@@ -890,7 +877,7 @@ public class ReportUIBuilder : MonoBehaviour
         sRect.sizeDelta = new Vector2(-155, 20);
 
         TextMeshProUGUI sTM = subGo.GetComponent<TextMeshProUGUI>();
-        sTM.text = CountInstances(d.label) + " detected · " + GetRiskLevel(d.label) + " risk";
+        sTM.text = CountInstances(d.label) + " detected";
         sTM.fontSize = 13;
         sTM.color = C_SUBTEXT;
 
@@ -1320,13 +1307,81 @@ public class ReportUIBuilder : MonoBehaviour
 
     static void SetRounded(Image img, float radius)
     {
+        if (img == null)
+        {
+            return;
+        }
+
         Sprite sprite = Resources.Load<Sprite>("UI/Rounded");
+
+        if (sprite == null)
+        {
+            int roundedRadius = Mathf.Max(1, Mathf.RoundToInt(radius));
+
+            if (!_runtimeRoundedSprites.TryGetValue(roundedRadius, out sprite))
+            {
+                sprite = CreateRuntimeRoundedSprite(64, roundedRadius);
+                _runtimeRoundedSprites[roundedRadius] = sprite;
+            }
+        }
 
         if (sprite != null)
         {
             img.sprite = sprite;
             img.type = Image.Type.Sliced;
         }
+    }
+
+    static Sprite CreateRuntimeRoundedSprite(int size, int radius)
+    {
+        Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        texture.name = "RuntimeRoundedRect_" + radius;
+        texture.filterMode = FilterMode.Bilinear;
+        texture.wrapMode = TextureWrapMode.Clamp;
+
+        Color solid = Color.white;
+        Color clear = new Color(1f, 1f, 1f, 0f);
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float px = x + 0.5f;
+                float py = y + 0.5f;
+                bool inside = IsInsideRoundedRect(px, py, size, size, radius);
+                texture.SetPixel(x, y, inside ? solid : clear);
+            }
+        }
+
+        texture.Apply();
+
+        Vector4 border = new Vector4(radius, radius, radius, radius);
+
+        return Sprite.Create(
+            texture,
+            new Rect(0, 0, size, size),
+            new Vector2(0.5f, 0.5f),
+            100f,
+            0,
+            SpriteMeshType.FullRect,
+            border
+        );
+    }
+
+    static bool IsInsideRoundedRect(float x, float y, float width, float height, float radius)
+    {
+        float innerLeft = radius;
+        float innerRight = width - radius;
+        float innerBottom = radius;
+        float innerTop = height - radius;
+
+        float closestX = Mathf.Clamp(x, innerLeft, innerRight);
+        float closestY = Mathf.Clamp(y, innerBottom, innerTop);
+
+        float dx = x - closestX;
+        float dy = y - closestY;
+
+        return dx * dx + dy * dy <= radius * radius;
     }
 
     static Color HexColor(string hex)
