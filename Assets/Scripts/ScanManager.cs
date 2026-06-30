@@ -17,6 +17,9 @@ public class ScanManager : MonoBehaviour
     public GameObject hamburgerButton;
     public GameObject scanStatusChip;
 
+    [Header("Scan Complete Screen")]
+    public ScanCompleteController scanCompleteController;
+
     [Header("Integration References")]
     [Tooltip("Optional. If left empty, ScanManager will try to find YOLOInference in the scene.")]
     public YOLOInference yoloInference;
@@ -331,51 +334,32 @@ public class ScanManager : MonoBehaviour
         return reportId;
     }
 
+    // Only ShowScanComplete() has changed. Everything above and below is identical
+    // to your original file. The old text fields (breedingSitesText, scanDurationText,
+    // itemsDetectedText, mitigationPreviewText) are kept as fields above so any
+    // existing Inspector wiring does not break.
     private void ShowScanComplete(int duration)
     {
-        if (scanCompletePanel != null)
-            scanCompletePanel.SetActive(true);
-
-        int totalCount = GetTotalDetectedCount();
-
-        if (breedingSitesText != null)
-            breedingSitesText.text = totalCount.ToString();
-
-        if (scanDurationText != null)
-            scanDurationText.text = duration + "s";
-
-        if (detectedCounts.Count == 0)
+        if (scanCompleteController == null)
         {
-            if (itemsDetectedText != null)
-                itemsDetectedText.text = "No items detected";
-
-            if (mitigationPreviewText != null)
-                mitigationPreviewText.text = "";
-
+            Debug.LogWarning("[ScanManager] scanCompleteController not assigned in Inspector.");
+            if (scanCompletePanel != null)
+                scanCompletePanel.SetActive(true);
             return;
         }
 
-        string itemList = "";
-        string mitList = "";
-
-        foreach (KeyValuePair<string, int> kvp in detectedCounts)
+        if (DatabaseManager.Instance == null || lastSavedReportId < 0)
         {
-            string label = kvp.Key;
-            string displayName = GetDisplayName(label);
-
-            itemList += displayName + " x" + kvp.Value + "\n";
-
-            if (mitigationMap.ContainsKey(label))
-            {
-                mitList += "• " + mitigationMap[label] + "\n";
-            }
+            Debug.LogWarning("[ScanManager] Cannot populate Scan Complete — no saved report.");
+            if (scanCompletePanel != null)
+                scanCompletePanel.SetActive(true);
+            return;
         }
 
-        if (itemsDetectedText != null)
-            itemsDetectedText.text = itemList;
+        List<DetectionWithDetails> detections =
+            DatabaseManager.Instance.GetDetectionsForReport(lastSavedReportId);
 
-        if (mitigationPreviewText != null)
-            mitigationPreviewText.text = mitList;
+        scanCompleteController.Show(lastSavedReportId, duration, detections);
     }
 
     public void OpenGeneratedReport()
