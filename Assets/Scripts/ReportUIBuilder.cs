@@ -328,36 +328,30 @@ public class ReportUIBuilder : MonoBehaviour
 
         if (!string.IsNullOrWhiteSpace(d.mitigation_description))
         {
-            string[] lines = d.mitigation_description.Split(
-                new[] { '\n', ';' },
-                StringSplitOptions.RemoveEmptyEntries
-            );
+            List<string> steps = SplitMitigationSteps(d.mitigation_description);
 
-            var steps = new List<string>();
-
-            foreach (string line in lines)
+            if (steps.Count > 0)
             {
-                string trimmed = line.Trim();
+                var sb = new System.Text.StringBuilder();
 
-                if (trimmed.Length > 0)
+                for (int i = 0; i < steps.Count; i++)
                 {
-                    steps.Add(trimmed);
+                    // Keep the fix text white, but make the bullet itself green
+                    // to match the reference style more closely.
+                    sb.Append("<color=#5ED9C0>•</color> ").Append(steps[i]);
+
+                    if (i < steps.Count - 1)
+                    {
+                        sb.Append("\n");
+                    }
                 }
+
+                _detailWhatToDo.text = sb.ToString();
             }
-
-            var sb = new System.Text.StringBuilder();
-
-            for (int i = 0; i < steps.Count; i++)
+            else
             {
-                sb.Append("• ").Append(steps[i]);
-
-                if (i < steps.Count - 1)
-                {
-                    sb.Append("\n\n");
-                }
+                _detailWhatToDo.text = "No mitigation information available for this item.";
             }
-
-            _detailWhatToDo.text = sb.ToString();
         }
         else
         {
@@ -408,11 +402,31 @@ public class ReportUIBuilder : MonoBehaviour
             15,
             new Vector2(0, 1),
             new Vector2(0, 1),
-            // Moved slightly up and left so the back control sits closer to the top-left safe area.
-            new Vector2(10, -48),
-            new Vector2(10 + backWidth, -18),
+            // Moved slightly down while keeping both report-screen back controls aligned.
+            // This gives the back label more clearance from mobile status bars / safe areas.
+            new Vector2(10, -58),
+            new Vector2(10 + backWidth, -28),
             Color.clear
         );
+
+        // Keep all report-screen back controls visually aligned.
+        // The first report page uses "← Back" and the detail page uses "← Full report";
+        // left-aligning the label makes both start in the exact same place.
+        TextMeshProUGUI backBtnLabel = backBtn.GetComponentInChildren<TextMeshProUGUI>();
+        if (backBtnLabel != null)
+        {
+            backBtnLabel.alignment = TextAlignmentOptions.MidlineLeft;
+            backBtnLabel.fontStyle = FontStyles.Normal;
+
+            RectTransform backLabelRect = backBtnLabel.GetComponent<RectTransform>();
+            if (backLabelRect != null)
+            {
+                backLabelRect.anchorMin = Vector2.zero;
+                backLabelRect.anchorMax = Vector2.one;
+                backLabelRect.offsetMin = Vector2.zero;
+                backLabelRect.offsetMax = Vector2.zero;
+            }
+        }
 
         backBtn.GetComponent<Button>().onClick.AddListener(() =>
         {
@@ -655,6 +669,10 @@ public class ReportUIBuilder : MonoBehaviour
         RectTransform scrollRect = scroll.GetComponent<RectTransform>();
         scrollRect.offsetMax = new Vector2(0, -135);
 
+        // Leave room at the bottom for the fixed Prev / Next navigation bar.
+        // This keeps the buttons visible while the item details scroll above them.
+        scrollRect.offsetMin = new Vector2(0, 104);
+
         RectTransform content = scroll.Find("Viewport/Content").GetComponent<RectTransform>();
 
         // ─────────────────────────────────────────────────────────────────
@@ -724,30 +742,42 @@ public class ReportUIBuilder : MonoBehaviour
 
         var todoCard = MakeAutoSizeCard("WhatToDoCard", content);
         _detailWhatToDo = GetAutoSizeCardText(todoCard);
-        _detailWhatToDo.lineSpacing = 6;
+        _detailWhatToDo.lineSpacing = 12;
+        _detailWhatToDo.richText = true;
+
+        var spacer = new GameObject("BottomSpacer", typeof(RectTransform), typeof(LayoutElement));
+        spacer.transform.SetParent(content, false);
+        spacer.GetComponent<LayoutElement>().preferredHeight = 24;
 
         // ─────────────────────────────────────────────────────────────────
-        // PREV / NEXT NAVIGATION
+        // FIXED PREV / NEXT NAVIGATION
         // ─────────────────────────────────────────────────────────────────
+        // Built outside the ScrollRect so these controls stay pinned near the
+        // bottom of the screen while the item details scroll above them.
         var navRow = new GameObject(
-            "NavRow",
+            "FixedNavRow",
             typeof(RectTransform),
-            typeof(HorizontalLayoutGroup),
-            typeof(LayoutElement)
+            typeof(HorizontalLayoutGroup)
         );
 
-        navRow.transform.SetParent(content, false);
-        navRow.GetComponent<LayoutElement>().preferredHeight = 64;
+        navRow.transform.SetParent(root, false);
+
+        RectTransform navRect = navRow.GetComponent<RectTransform>();
+        SetAnchors(
+            navRect,
+            new Vector2(0, 0),
+            new Vector2(1, 0),
+            new Vector2(0, 28),
+            new Vector2(0, 92)
+        );
 
         var hlg = navRow.GetComponent<HorizontalLayoutGroup>();
         hlg.spacing = 12;
-        hlg.padding = new RectOffset(20, 20, 8, 8);
+        hlg.padding = new RectOffset(36, 36, 8, 8);
         hlg.childControlWidth = true;
         hlg.childControlHeight = false;
         hlg.childForceExpandWidth = true;
         hlg.childForceExpandHeight = false;
-
-        RectTransform navRect = navRow.GetComponent<RectTransform>();
 
         var prevBtn = MakeButton(
             "PrevBtn",
@@ -794,10 +824,6 @@ public class ReportUIBuilder : MonoBehaviour
         });
 
         SetRounded(nextBtn.GetComponent<Image>(), 12);
-
-        var spacer = new GameObject("BottomSpacer", typeof(RectTransform), typeof(LayoutElement));
-        spacer.transform.SetParent(content, false);
-        spacer.GetComponent<LayoutElement>().preferredHeight = 55;
     }
 
     void CreateDetectedItemCard(Transform parent, DetectionWithDetails d, int index)
@@ -969,6 +995,7 @@ public class ReportUIBuilder : MonoBehaviour
             name,
             typeof(RectTransform),
             typeof(Image),
+            typeof(Outline),
             typeof(LayoutElement),
             typeof(ContentSizeFitter),
             typeof(VerticalLayoutGroup)
@@ -979,6 +1006,13 @@ public class ReportUIBuilder : MonoBehaviour
         Image img = go.GetComponent<Image>();
         img.color = C_CARD;
         SetRounded(img, 16);
+
+        // Match the Risk Level card style by giving auto-size text cards
+        // the same green outline treatment without changing their layout.
+        Outline outline = go.GetComponent<Outline>();
+        outline.effectColor = C_CARD_BORDER;
+        outline.effectDistance = new Vector2(1.5f, -1.5f);
+        outline.useGraphicAlpha = false;
 
         var vlg = go.GetComponent<VerticalLayoutGroup>();
         vlg.padding = new RectOffset(20, 20, 20, 20);
@@ -992,6 +1026,7 @@ public class ReportUIBuilder : MonoBehaviour
 
         return go;
     }
+
 
     // Creates the body-text child inside a card built with MakeAutoSizeCard.
     // The LayoutElement lets ContentSizeFitter measure the TMP preferred height.
@@ -1406,6 +1441,73 @@ public class ReportUIBuilder : MonoBehaviour
         return c == 1 ? "1 instance detected" : c + " instances detected";
     }
     
+    static List<string> SplitMitigationSteps(string raw)
+    {
+        var steps = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return steps;
+        }
+
+        // Mitigation text can come from the database as separate lines, semicolon-separated
+        // phrases, or one paragraph with multiple sentences. Split all of those so each
+        // fix becomes its own bullet instead of one long bullet.
+        string normalized = raw.Replace("\r", "\n");
+
+        string[] chunks = normalized.Split(
+            new[] { '\n', ';' },
+            StringSplitOptions.RemoveEmptyEntries
+        );
+
+        foreach (string chunk in chunks)
+        {
+            string cleanedChunk = CleanMitigationStep(chunk);
+
+            if (cleanedChunk.Length == 0)
+            {
+                continue;
+            }
+
+            string[] sentencePieces = cleanedChunk.Split(
+                new[] { ". " },
+                StringSplitOptions.RemoveEmptyEntries
+            );
+
+            foreach (string piece in sentencePieces)
+            {
+                string step = CleanMitigationStep(piece);
+
+                if (step.Length == 0)
+                {
+                    continue;
+                }
+
+                if (!step.EndsWith(".") && !step.EndsWith("!") && !step.EndsWith("?"))
+                {
+                    step += ".";
+                }
+
+                steps.Add(step);
+            }
+        }
+
+        return steps;
+    }
+
+    static string CleanMitigationStep(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "";
+        }
+
+        return value
+            .Trim()
+            .TrimStart('•', '-', '*', '1', '2', '3', '4', '5', '.', ')')
+            .Trim();
+    }
+
     public static string GetRiskLevelPublic(string label)
     {
         return GetRiskLevel(label);
