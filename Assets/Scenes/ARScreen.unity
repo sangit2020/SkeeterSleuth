@@ -6585,13 +6585,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2c495437dd23c45c29d61c86cf09dd2d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ARPinManager
-  yoloInference: {fileID: 2512387470422636670}
+  yoloInference: {fileID: 2038752590}
   raycastManager: {fileID: 2512387470422636672}
   arCamera: {fileID: 2512387468973847745}
   pinPrefab: {fileID: 1384458562331883140, guid: 3e54505fe2227458ca17b9256c38f2f4, type: 3}
-  scanManager: {fileID: 0}
+  scanManager: {fileID: 144995574}
   confidenceThreshold: 0.7
   pinDepth: 1.5
+  verboseLogging: 1
 --- !u!4 &1318251415
 Transform:
   m_ObjectHideFlags: 0
@@ -12156,8 +12157,6 @@ GameObject:
   - component: {fileID: 2512387470422636640}
   - component: {fileID: 2512387470422636641}
   - component: {fileID: 2512387470422636642}
-  - component: {fileID: 2512387470422636670}
-  - component: {fileID: 2512387470422636671}
   - component: {fileID: 2512387470422636672}
   - component: {fileID: 2512387470422636673}
   m_Layer: 0
@@ -12167,35 +12166,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &2512387470422636670
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2512387470422636669}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9ab1be509a5f4496c88ee43038ef0305, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::YOLOInference
-  modelAsset: {fileID: 5022602860645237092, guid: c27435140fa42486aa76c21427746e7e, type: 3}
-  cameraManager: {fileID: 2512387468973847747}
-  scanManager: {fileID: 144995574}
---- !u!114 &2512387470422636671
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2512387470422636669}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 36afe026e33a24110a146b79eec9fe02, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BoundingBoxDrawer
-  yoloInference: {fileID: 2512387470422636670}
-  boundingBoxContainer: {fileID: 0}
 --- !u!114 &2512387470422636672
 MonoBehaviour:
   m_ObjectHideFlags: 0

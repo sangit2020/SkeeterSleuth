@@ -19,6 +19,14 @@ public class YOLOInference : MonoBehaviour
 
     public List<DetectionResult> currentDetections = new List<DetectionResult>();
 
+    // Raw sensor dimensions of the most recently processed camera frame (e.g.
+    // 1920x1440, landscape sensor mount), before the 90-degree rotation below.
+    // ARPinManager needs these to know the true aspect ratio of the image the
+    // bbox coordinates are normalized against, since the AR camera background
+    // crops that image to cover the screen (rather than letterboxing it).
+    public int LastCpuImageWidth { get; private set; }
+    public int LastCpuImageHeight { get; private set; }
+
     void Start()
     {
         runtimeModel = Unity.InferenceEngine.ModelLoader.Load(modelAsset);
@@ -46,10 +54,17 @@ public class YOLOInference : MonoBehaviour
 
     void RunInference()
     {
-        if (!cameraManager.TryAcquireLatestCpuImage(out var cpuImage)) return;
+        if (!cameraManager.TryAcquireLatestCpuImage(out var cpuImage))
+        {
+            Debug.Log("[YOLOInference] RunInference: TryAcquireLatestCpuImage FAILED this frame - no CPU image acquired, inference did not run.");
+            return;
+        }
 
         using (cpuImage)
         {
+            LastCpuImageWidth = cpuImage.width;
+            LastCpuImageHeight = cpuImage.height;
+
             var conversionParams = new XRCpuImage.ConversionParams
             {
                 inputRect = new RectInt(0, 0, cpuImage.width, cpuImage.height),
@@ -64,12 +79,32 @@ public class YOLOInference : MonoBehaviour
 
             cpuImage.Convert(conversionParams, rawBytes);
 
+            // cpuImage is the raw camera sensor buffer (e.g. 1920x1440, landscape),
+            // squashed above to a 640x640 square with no orientation correction. The
+            // sensor is mounted landscape on iOS regardless of how the phone is held,
+            // so when the user holds the phone portrait (the normal case for this app),
+            // the image YOLO receives is still rotated 90 degrees relative to what's on
+            // screen - the model sees distorted/sideways objects, which explains zero
+            // detections. Rotate 90 degrees clockwise here so the image matches the
+            // portrait orientation the user sees. Rotating the already-squashed square
+            // (instead of the full-resolution source) gives the same result for far
+            // less work, since resizing into equal width/height commutes with rotation.
+            // If detections come back rotated/mirrored the wrong way on device, swap
+            // this to counter-clockwise: srcRow = destCol; srcCol = INPUT_SIZE - 1 - destRow;
             var floatData = new float[1 * 3 * INPUT_SIZE * INPUT_SIZE];
-            for (int i = 0; i < INPUT_SIZE * INPUT_SIZE; i++)
+            for (int destRow = 0; destRow < INPUT_SIZE; destRow++)
             {
-                floatData[i] = rawBytes[i * 3] / 255f;
-                floatData[INPUT_SIZE * INPUT_SIZE + i] = rawBytes[i * 3 + 1] / 255f;
-                floatData[2 * INPUT_SIZE * INPUT_SIZE + i] = rawBytes[i * 3 + 2] / 255f;
+                for (int destCol = 0; destCol < INPUT_SIZE; destCol++)
+                {
+                    int srcRow = INPUT_SIZE - 1 - destCol;
+                    int srcCol = destRow;
+                    int srcIdx = (srcRow * INPUT_SIZE + srcCol) * 3;
+                    int destIdx = destRow * INPUT_SIZE + destCol;
+
+                    floatData[destIdx] = rawBytes[srcIdx] / 255f;
+                    floatData[INPUT_SIZE * INPUT_SIZE + destIdx] = rawBytes[srcIdx + 1] / 255f;
+                    floatData[2 * INPUT_SIZE * INPUT_SIZE + destIdx] = rawBytes[srcIdx + 2] / 255f;
+                }
             }
 
             rawBytes.Dispose();
@@ -80,9 +115,58 @@ public class YOLOInference : MonoBehaviour
             worker.Schedule(inputTensor);
 
             using var outputTensor = worker.PeekOutput("output0") as Unity.InferenceEngine.Tensor<float>;
+
+            // Derive the output layout from the model itself instead of hardcoding
+            // 8400 anchors / 13 classes. A swapped-in ONNX file (different class
+            // count, different input resolution, different anchor count) changes
+            // this shape, and hardcoded constants would index outputData out of
+            // bounds - which is exactly what an IndexOutOfRangeException here means.
+            var outputShape = outputTensor.shape;
+            if (outputShape.rank != 3 || outputShape[0] != 1)
+            {
+                Debug.LogError($"[YOLOInference] Unexpected output tensor shape {outputShape} (rank={outputShape.rank}). " +
+                                "Expected rank 3, batch 1, e.g. (1, 4+numClasses, numDetections). Skipping this frame - " +
+                                "check that the ONNX model's output layout matches what ParseDetections assumes.");
+                return;
+            }
+
+            int stride = outputShape[1];
+            int numDetections = outputShape[2];
+            int numClasses = stride - 4;
+
+            if (numClasses != GetLabelCount())
+            {
+                Debug.LogWarning($"[YOLOInference] Model reports {numClasses} classes but the GetLabel() list has " +
+                                  $"{GetLabelCount()} entries - labels will be wrong/\"unknown\" for out-of-range class IDs. " +
+                                  "Update the labels array in GetLabel() to match this model.");
+            }
+
             var outputData = outputTensor.DownloadToArray();
 
-            var rawDetections = ParseDetections(outputData);
+            // Unconditional - fires every frame regardless of whether anything below
+            // clears CONFIDENCE_THRESHOLD. Lets us tell "the model ran and scored
+            // everything low" apart from "this frame never reached inference at all",
+            // which the old code (which only logged when count > 0) couldn't show.
+            float maxRawConfidence = 0f;
+            int maxRawClassId = -1;
+            for (int i = 0; i < numDetections; i++)
+            {
+                for (int c = 4; c < stride; c++)
+                {
+                    float score = outputData[c * numDetections + i];
+                    if (score > maxRawConfidence)
+                    {
+                        maxRawConfidence = score;
+                        maxRawClassId = c - 4;
+                    }
+                }
+            }
+            Debug.Log($"[YOLOInference] RunInference ran: cpuImage={cpuImage.width}x{cpuImage.height} " +
+                      $"outputShape={outputShape} numDetections={numDetections} numClasses={numClasses} " +
+                      $"maxRawConfidence={maxRawConfidence:F4} (threshold={CONFIDENCE_THRESHOLD:F2}) " +
+                      $"bestClass={GetLabel(maxRawClassId)} t={Time.time:F2}");
+
+            var rawDetections = ParseDetections(outputData, numDetections, stride);
             currentDetections = ApplyNMS(rawDetections);
 
             if (scanManager != null && currentDetections.Count > 0)
@@ -95,12 +179,9 @@ public class YOLOInference : MonoBehaviour
         }
     }
 
-    List<DetectionResult> ParseDetections(float[] output)
+    List<DetectionResult> ParseDetections(float[] output, int numDetections, int stride)
     {
         var results = new List<DetectionResult>();
-        int numDetections = 8400;
-        int numClasses = 13;
-        int stride = 4 + numClasses;
 
         for (int i = 0; i < numDetections; i++)
         {
@@ -179,29 +260,31 @@ public class YOLOInference : MonoBehaviour
         return union <= 0 ? 0 : intersection / union;
     }
 
+    static readonly string[] labels = {
+        "ss_birdbath",
+        "ss_bromiliad",
+        "ss_bucket",
+        "ss_grill",
+        "ss_inflatablepool",
+        "ss_pot",
+        "ss_tire",
+        "ss_trashcan",
+        "ss_treehole",
+        "ss_waterhyacinth",
+        "ss_wateringcan",
+        "ss_waterlettuce",
+        "ss_wheelbarrow"
+    };
+
     string GetLabel(int classId)
     {
-        string[] labels = {
-            "ss_birdbath",
-            "ss_bromiliad",
-            "ss_bucket",
-            "ss_grill",
-            "ss_inflatablepool",
-            "ss_pot",
-            "ss_tire",
-            "ss_trashcan",
-            "ss_treehole",
-            "ss_waterhyacinth",
-            "ss_wateringcan",
-            "ss_waterlettuce",
-            "ss_wheelbarrow"
-        };
-
         if (classId >= 0 && classId < labels.Length)
             return labels[classId];
 
         return "unknown";
     }
+
+    int GetLabelCount() => labels.Length;
 
     void OnDestroy()
     {
