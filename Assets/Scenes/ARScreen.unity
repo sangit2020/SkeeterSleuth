@@ -8464,7 +8464,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3208125897108992327, guid: 946fec6381ba343498ba3b6a07e4829b, type: 3}
       propertyPath: runMockScanOnStart
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 4331357915481008452, guid: 946fec6381ba343498ba3b6a07e4829b, type: 3}
       propertyPath: m_LocalPosition.x

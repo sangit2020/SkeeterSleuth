@@ -179,12 +179,13 @@ public class ScanHistoryUIBuilder : MonoBehaviour
 
         List<ScanReport> reports = FetchReports();
 
-        // Sort newest first
+        // Sort newest first.
+        // ScanReport.scanned_at is saved in UTC by DatabaseManager, so parse as
+        // DateTimeOffset and compare using local time to avoid confusing date shifts.
         reports.Sort((a, b) =>
         {
-            DateTime dtA, dtB;
-            DateTime.TryParse(a.scanned_at, out dtA);
-            DateTime.TryParse(b.scanned_at, out dtB);
+            DateTime dtA = ParseScanDateForDisplay(a.scanned_at);
+            DateTime dtB = ParseScanDateForDisplay(b.scanned_at);
             return dtB.CompareTo(dtA);
         });
 
@@ -655,8 +656,17 @@ public class ScanHistoryUIBuilder : MonoBehaviour
 
     List<ScanReport> FetchReports()
     {
+#if UNITY_EDITOR
         if (useMockDataForDebugging)
+        {
             return GetMockReports();
+        }
+#else
+        if (useMockDataForDebugging)
+        {
+            Debug.LogWarning("[ScanHistoryUIBuilder] useMockDataForDebugging is enabled but ignored in non-Editor builds.");
+        }
+#endif
 
         if (DatabaseManager.Instance == null)
         {
@@ -704,9 +714,37 @@ public class ScanHistoryUIBuilder : MonoBehaviour
 
     static string FormatDate(string scannedAt)
     {
-        if (DateTime.TryParse(scannedAt, out DateTime dt))
-            return dt.ToString("MMMM d, yyyy");
+        DateTime localDate = ParseScanDateForDisplay(scannedAt);
+
+        if (localDate != DateTime.MinValue)
+        {
+            return localDate.ToString("MMMM d, yyyy");
+        }
+
         return scannedAt ?? "Unknown date";
+    }
+
+    static DateTime ParseScanDateForDisplay(string scannedAt)
+    {
+        if (string.IsNullOrWhiteSpace(scannedAt))
+        {
+            return DateTime.MinValue;
+        }
+
+        // DatabaseManager saves timestamps with DateTime.UtcNow.ToString("o").
+        // DateTimeOffset preserves that UTC offset and converts it to the user's
+        // local device time before displaying/sorting scan history.
+        if (DateTimeOffset.TryParse(scannedAt, out DateTimeOffset dto))
+        {
+            return dto.ToLocalTime().DateTime;
+        }
+
+        if (DateTime.TryParse(scannedAt, out DateTime dt))
+        {
+            return dt.Kind == DateTimeKind.Utc ? dt.ToLocalTime() : dt;
+        }
+
+        return DateTime.MinValue;
     }
 
     static string FormatDuration(int seconds)

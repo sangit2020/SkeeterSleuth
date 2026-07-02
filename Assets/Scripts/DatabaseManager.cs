@@ -37,10 +37,17 @@ public class DatabaseManager : MonoBehaviour
 
         InitializeDatabase();
 
+#if UNITY_EDITOR
         if (runMockScanOnStart)
         {
             SaveMockScan();
         }
+#else
+        if (runMockScanOnStart)
+        {
+            Debug.LogWarning("[DatabaseManager] runMockScanOnStart is enabled but ignored in non-Editor builds.");
+        }
+#endif
     }
 
     private void OnDestroy()
@@ -387,6 +394,10 @@ public class DatabaseManager : MonoBehaviour
 
     public void SaveMockScan()
     {
+#if !UNITY_EDITOR
+        Debug.LogWarning("[DatabaseManager] SaveMockScan() was called in a non-Editor build and was ignored.");
+        return;
+#else
         int reportId = SaveReport(
             durationSeconds: 45,
             totalObjectsDetected: 3,
@@ -439,6 +450,7 @@ public class DatabaseManager : MonoBehaviour
                 detection.mitigation_description
             );
         }
+#endif
     }
 }
 
