@@ -37,8 +37,8 @@ public class ReportUIBuilder : MonoBehaviour
     static readonly Color C_HEADER_BG      = HexColor("#2C5A3D"); // Top/header background
     static readonly Color C_CARD           = HexColor("#243F2C"); // Card background
     static readonly Color C_CARD_BORDER    = HexColor("#3C6B4C"); // Card border / outline
-    static readonly Color C_ICON_BG        = HexColor("#2D593D"); // Icon tile background
-    static readonly Color C_ICON_BORDER    = HexColor("#3C6B4C"); // Icon tile border
+    static readonly Color C_ICON_BG        = HexColor("#2E583D"); // Icon tile background; matched to the icon PNG background
+    static readonly Color C_ICON_BORDER    = HexColor("#2E583D"); // Icon tile border; matched to icon PNG background
     static readonly Color C_TEXT_PRIMARY   = HexColor("#F0F0F0"); // Primary text
     static readonly Color C_SUBTEXT        = HexColor("#7EA88C"); // Secondary / muted text
     static readonly Color C_SECTION_HEADER = HexColor("#A1D4C0"); // Section header text
@@ -854,18 +854,23 @@ public class ReportUIBuilder : MonoBehaviour
         iRect.anchorMin = new Vector2(0, 0.5f);
         iRect.anchorMax = new Vector2(0, 0.5f);
         iRect.pivot = new Vector2(0, 0.5f);
-        iRect.anchoredPosition = new Vector2(16, 0);
-        iRect.sizeDelta = new Vector2(48, 48);
+        // Slightly larger icon badge with a visible green ring so the imported
+        // object art feels integrated with the card instead of pasted on top.
+        iRect.anchoredPosition = new Vector2(14, 0);
+        iRect.sizeDelta = new Vector2(56, 56);
 
         Image iconBorder = icon.GetComponent<Image>();
         iconBorder.color = C_ICON_BORDER;
-        SetRounded(iconBorder, 24);
+        iconBorder.raycastTarget = false;
+        SetRounded(iconBorder, 28);
 
-        // Use the circular icon tile itself as a mask so the object art fills the circle cleanly.
+        // Clip icon art to the circular badge shape. The mask still shows the
+        // green border graphic, so the icon reads as part of the app UI.
         Mask iconMask = icon.AddComponent<Mask>();
         iconMask.showMaskGraphic = true;
 
-        AddCardFill(icon.transform, 1.5f, C_ICON_BG);
+        Image iconFill = AddCardFill(icon.transform, 2f, C_ICON_BG);
+        iconFill.raycastTarget = false;
 
         // Load the actual object icon from Assets/Resources/Icons.
         // These paths use the current file names you imported, without the .png extension.
@@ -881,14 +886,18 @@ public class ReportUIBuilder : MonoBehaviour
                 spriteRect,
                 Vector2.zero,
                 Vector2.one,
-                new Vector2(1.5f, 1.5f),
-                new Vector2(-1.5f, -1.5f)
+                new Vector2(7f, 7f),
+                new Vector2(-7f, -7f)
             );
 
             Image spriteImg = spriteGo.GetComponent<Image>();
             spriteImg.sprite = objectSprite;
+
+            // Leave the sprite untinted so the object art keeps its original colors.
+            // The icon tile background above uses #2E583D, which matches the edited
+            // icon PNG background so any remaining square blends into the circle.
             spriteImg.color = Color.white;
-            spriteImg.preserveAspect = false;
+            spriteImg.preserveAspect = true;
             spriteImg.raycastTarget = false;
         }
         else
@@ -918,8 +927,8 @@ public class ReportUIBuilder : MonoBehaviour
         nRect.anchorMin = new Vector2(0, 1);
         nRect.anchorMax = new Vector2(1, 1);
         nRect.pivot = new Vector2(0, 1);
-        nRect.anchoredPosition = new Vector2(75, -14);
-        nRect.sizeDelta = new Vector2(-155, 26);
+        nRect.anchoredPosition = new Vector2(86, -14);
+        nRect.sizeDelta = new Vector2(-166, 26);
 
         TextMeshProUGUI nTM = nameGo.GetComponent<TextMeshProUGUI>();
         nTM.text = string.IsNullOrWhiteSpace(d.display_name) ? d.label : d.display_name;
@@ -934,8 +943,8 @@ public class ReportUIBuilder : MonoBehaviour
         sRect.anchorMin = new Vector2(0, 0);
         sRect.anchorMax = new Vector2(1, 0);
         sRect.pivot = new Vector2(0, 0);
-        sRect.anchoredPosition = new Vector2(75, 16);
-        sRect.sizeDelta = new Vector2(-155, 20);
+        sRect.anchoredPosition = new Vector2(86, 16);
+        sRect.sizeDelta = new Vector2(-166, 20);
 
         TextMeshProUGUI sTM = subGo.GetComponent<TextMeshProUGUI>();
         sTM.text = CountInstances(d.label) + " detected";
