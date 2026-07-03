@@ -392,6 +392,19 @@ public class DatabaseManager : MonoBehaviour
             .ToList();
     }
 
+    public void ClearScanHistory()
+    {
+        EnsureDatabaseInitialized();
+
+        // Delete detections first because they belong to scan reports.
+        db.DeleteAll<Detection>();
+
+        // Then delete the actual scan report rows.
+        db.DeleteAll<ScanReport>();
+
+        Debug.Log("[DatabaseManager] Scan history cleared.");
+    }
+
     public void SaveMockScan()
     {
 #if !UNITY_EDITOR
