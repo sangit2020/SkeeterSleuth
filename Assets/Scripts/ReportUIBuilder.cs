@@ -861,20 +861,55 @@ public class ReportUIBuilder : MonoBehaviour
         iconBorder.color = C_ICON_BORDER;
         SetRounded(iconBorder, 24);
 
+        // Use the circular icon tile itself as a mask so the object art fills the circle cleanly.
+        Mask iconMask = icon.AddComponent<Mask>();
+        iconMask.showMaskGraphic = true;
+
         AddCardFill(icon.transform, 1.5f, C_ICON_BG);
 
-        var emojiGo = new GameObject("Emoji", typeof(RectTransform), typeof(TextMeshProUGUI));
-        emojiGo.transform.SetParent(icon.transform, false);
+        // Load the actual object icon from Assets/Resources/Icons.
+        // These paths use the current file names you imported, without the .png extension.
+        Sprite objectSprite = LoadObjectIcon(d.label);
 
-        RectTransform eRect = emojiGo.GetComponent<RectTransform>();
-        eRect.anchorMin = Vector2.zero;
-        eRect.anchorMax = Vector2.one;
-        eRect.sizeDelta = Vector2.zero;
+        if (objectSprite != null)
+        {
+            var spriteGo = new GameObject("ObjectIcon", typeof(RectTransform), typeof(Image));
+            spriteGo.transform.SetParent(icon.transform, false);
 
-        TextMeshProUGUI eTM = emojiGo.GetComponent<TextMeshProUGUI>();
-        eTM.text = GetIconForLabel(d.label);
-        eTM.fontSize = 22;
-        eTM.alignment = TextAlignmentOptions.Center;
+            RectTransform spriteRect = spriteGo.GetComponent<RectTransform>();
+            SetAnchors(
+                spriteRect,
+                Vector2.zero,
+                Vector2.one,
+                new Vector2(1.5f, 1.5f),
+                new Vector2(-1.5f, -1.5f)
+            );
+
+            Image spriteImg = spriteGo.GetComponent<Image>();
+            spriteImg.sprite = objectSprite;
+            spriteImg.color = Color.white;
+            spriteImg.preserveAspect = false;
+            spriteImg.raycastTarget = false;
+        }
+        else
+        {
+            // Text fallback so the UI still works if an icon is missing or not imported as a Sprite.
+            var fallbackGo = new GameObject("IconFallback", typeof(RectTransform), typeof(TextMeshProUGUI));
+            fallbackGo.transform.SetParent(icon.transform, false);
+
+            RectTransform fallbackRect = fallbackGo.GetComponent<RectTransform>();
+            fallbackRect.anchorMin = Vector2.zero;
+            fallbackRect.anchorMax = Vector2.one;
+            fallbackRect.sizeDelta = Vector2.zero;
+
+            TextMeshProUGUI fallbackText = fallbackGo.GetComponent<TextMeshProUGUI>();
+            fallbackText.text = GetIconFallbackText(d.label);
+            fallbackText.fontSize = 14;
+            fallbackText.color = C_SECTION_HEADER;
+            fallbackText.fontStyle = FontStyles.Bold;
+            fallbackText.alignment = TextAlignmentOptions.Center;
+            fallbackText.raycastTarget = false;
+        }
 
         var nameGo = new GameObject("ItemName", typeof(RectTransform), typeof(TextMeshProUGUI));
         nameGo.transform.SetParent(rect, false);
@@ -1619,28 +1654,77 @@ public class ReportUIBuilder : MonoBehaviour
         };
     }
 
-    static string GetIconForLabel(string label)
+    static Sprite LoadObjectIcon(string label)
+    {
+        string path = GetIconResourcePath(label);
+
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
+        Sprite sprite = Resources.Load<Sprite>(path);
+
+        if (sprite == null)
+        {
+            Debug.LogWarning("[ReportUIBuilder] Missing icon Sprite at Resources/" + path + " for label: " + label);
+        }
+
+        return sprite;
+    }
+
+    static string GetIconResourcePath(string label)
     {
         if (string.IsNullOrWhiteSpace(label))
         {
-            return "🦟";
+            return "";
         }
 
         label = label.ToLowerInvariant();
 
-        if (label.Contains("birdbath")) return "🐦";
-        if (label.Contains("bucket")) return "🪣";
-        if (label.Contains("tire")) return "🛞";
-        if (label.Contains("trashcan")) return "🗑";
-        if (label.Contains("treehole")) return "🌳";
-        if (label.Contains("wateringcan")) return "💧";
-        if (label.Contains("wheelbarrow")) return "🛒";
-        if (label.Contains("pot")) return "🪴";
-        if (label.Contains("waterlettuce")) return "🌿";
-        if (label.Contains("waterhyacinth")) return "🌿";
-        if (label.Contains("bromiliad")) return "🌱";
+        if (label.Contains("ss_birdbath")) return "Icons/icon_birdbath";
+        if (label.Contains("ss_bucket")) return "Icons/icon_bucket";
+        if (label.Contains("ss_grill")) return "Icons/icon_grill";
+        if (label.Contains("ss_inflatablepool")) return "Icons/icon_pool";
+        if (label.Contains("ss_pot")) return "Icons/icon_pot";
+        if (label.Contains("ss_tire")) return "Icons/icon_tire";
+        if (label.Contains("ss_trashcan")) return "Icons/icon_trash";
+        if (label.Contains("ss_treehole")) return "Icons/icon_treehole";
+        if (label.Contains("ss_wateringcan")) return "Icons/icon_wateringcan";
+        if (label.Contains("ss_wheelbarrow")) return "Icons/icon_wheelbarrow";
 
-        return "🦟";
+        // These three do not have separate imported icons yet, so use the plant pot icon as a clean fallback.
+        if (label.Contains("ss_bromiliad")) return "Icons/icon_pot";
+        if (label.Contains("ss_waterhyacinth")) return "Icons/icon_pot";
+        if (label.Contains("ss_waterlettuce")) return "Icons/icon_pot";
+
+        return "";
+    }
+
+    static string GetIconFallbackText(string label)
+    {
+        if (string.IsNullOrWhiteSpace(label))
+        {
+            return "?";
+        }
+
+        label = label.ToLowerInvariant();
+
+        if (label.Contains("birdbath")) return "BB";
+        if (label.Contains("bucket")) return "B";
+        if (label.Contains("grill")) return "G";
+        if (label.Contains("inflatablepool")) return "P";
+        if (label.Contains("pot")) return "P";
+        if (label.Contains("tire")) return "T";
+        if (label.Contains("trashcan")) return "TC";
+        if (label.Contains("treehole")) return "TH";
+        if (label.Contains("wateringcan")) return "WC";
+        if (label.Contains("wheelbarrow")) return "W";
+        if (label.Contains("bromiliad")) return "BR";
+        if (label.Contains("waterhyacinth")) return "WH";
+        if (label.Contains("waterlettuce")) return "WL";
+
+        return "?";
     }
 
     static void LoadMockData(out ScanReport report, out List<DetectionWithDetails> detections)

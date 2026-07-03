@@ -1107,6 +1107,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: ReportUIManager
       objectReference: {fileID: 0}
+    - target: {fileID: 5217052912004203515, guid: f22ddbab1466f0f4690b6f15a669bcdf, type: 3}
+      propertyPath: useMockDataForUIDebugging
+      value: 1
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
