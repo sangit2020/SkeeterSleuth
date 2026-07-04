@@ -78,6 +78,9 @@ public class ReportUIBuilder : MonoBehaviour
     TextMeshProUGUI _detailWhatToDo;
     Image _detailRiskBadgeBg;
     TextMeshProUGUI _detailRiskBadgeText;
+    Image _detailObjectIconImage;
+    GameObject _detailObjectIconImageObject;
+    TextMeshProUGUI _detailObjectIconFallback;
 
     List<DetectionWithDetails> _currentDetections = new();
     ScanReport _currentReport;
@@ -322,6 +325,7 @@ public class ReportUIBuilder : MonoBehaviour
         _detailTitle.text = string.IsNullOrWhiteSpace(d.display_name) ? d.label : d.display_name;
         _detailSubtitle.text = InstanceCountText(d.label);
 
+
         _detailWhyRisk.text = string.IsNullOrWhiteSpace(d.object_description)
             ? "No risk description available for this item."
             : d.object_description;
@@ -364,6 +368,25 @@ public class ReportUIBuilder : MonoBehaviour
         _detailRiskBadgeText.text = risk + " risk";
         _detailRiskBadgeBg.color = riskBg;
         _detailRiskBadgeText.color = riskText;
+
+
+        if (_detailObjectIconImageObject != null && _detailObjectIconImage != null && _detailObjectIconFallback != null)
+        {
+            Sprite objectSprite = LoadObjectIcon(d.label);
+
+            if (objectSprite != null)
+            {
+                _detailObjectIconImage.sprite = objectSprite;
+                _detailObjectIconImageObject.SetActive(true);
+                _detailObjectIconFallback.gameObject.SetActive(false);
+            }
+            else
+            {
+                _detailObjectIconImageObject.SetActive(false);
+                _detailObjectIconFallback.text = GetIconFallbackText(d.label);
+                _detailObjectIconFallback.gameObject.SetActive(true);
+            }
+        }
     }
 
 
@@ -676,55 +699,118 @@ public class ReportUIBuilder : MonoBehaviour
         RectTransform content = scroll.Find("Viewport/Content").GetComponent<RectTransform>();
 
         // ─────────────────────────────────────────────────────────────────
-        // RISK LEVEL
+        // ITEM SUMMARY / RISK LEVEL
         // ─────────────────────────────────────────────────────────────────
-        MakeSectionLabel("RISK LEVEL", content);
-
-        var riskCard = MakeCard("RiskLevelCard", content, 112);
-        RectTransform riskCardRect = riskCard.GetComponent<RectTransform>();
-
-        var overallItemLabel = MakeText(
-            "OverallItemLabel",
-            riskCardRect,
-            "Overall item risk",
-            16,
-            C_TEXT_PRIMARY,
-            FontStyles.Normal,
-            new Vector2(0, 1),
-            new Vector2(0, 1),
-            new Vector2(20, -52),
-            new Vector2(190, -18)
+        // Two-card summary row:
+        //   • left: large #2E583D object icon tile so the PNG background blends in
+        //   • right: clean risk-level tile with only the risk label and badge
+        var summaryRow = new GameObject(
+            "ItemSummaryRow",
+            typeof(RectTransform),
+            typeof(LayoutElement),
+            typeof(HorizontalLayoutGroup)
         );
-        overallItemLabel.alignment = TextAlignmentOptions.Left;
+
+        summaryRow.transform.SetParent(content, false);
+        summaryRow.GetComponent<LayoutElement>().preferredHeight = 128;
+
+        var summaryLayout = summaryRow.GetComponent<HorizontalLayoutGroup>();
+        summaryLayout.spacing = 12;
+        summaryLayout.padding = new RectOffset(0, 0, 0, 0);
+        summaryLayout.childControlWidth = true;
+        summaryLayout.childControlHeight = true;
+        summaryLayout.childForceExpandWidth = false;
+        summaryLayout.childForceExpandHeight = true;
+
+        // Large icon tile. It intentionally uses #2E583D to match the icon PNG background.
+        var detailIcon = new GameObject(
+            "DetailObjectIconTile",
+            typeof(RectTransform),
+            typeof(Image),
+            typeof(LayoutElement)
+        );
+
+        detailIcon.transform.SetParent(summaryRow.transform, false);
+
+        var detailIconLayout = detailIcon.GetComponent<LayoutElement>();
+        detailIconLayout.preferredWidth = 128;
+        detailIconLayout.preferredHeight = 128;
+        detailIconLayout.flexibleWidth = 0;
+
+        Image detailIconBg = detailIcon.GetComponent<Image>();
+        detailIconBg.color = C_ICON_BG;
+        detailIconBg.raycastTarget = false;
+        SetRounded(detailIconBg, 18);
+
+        var detailSpriteGo = new GameObject("DetailObjectIconImage", typeof(RectTransform), typeof(Image));
+        detailSpriteGo.transform.SetParent(detailIcon.transform, false);
+
+        RectTransform detailSpriteRect = detailSpriteGo.GetComponent<RectTransform>();
+        SetAnchors(
+            detailSpriteRect,
+            Vector2.zero,
+            Vector2.one,
+            new Vector2(3f, 3f),
+            new Vector2(-3f, -3f)
+        );
+
+        _detailObjectIconImageObject = detailSpriteGo;
+        _detailObjectIconImage = detailSpriteGo.GetComponent<Image>();
+        _detailObjectIconImage.color = Color.white;
+        _detailObjectIconImage.preserveAspect = true;
+        _detailObjectIconImage.raycastTarget = false;
+
+        var detailFallbackGo = new GameObject("DetailObjectIconFallback", typeof(RectTransform), typeof(TextMeshProUGUI));
+        detailFallbackGo.transform.SetParent(detailIcon.transform, false);
+
+        RectTransform detailFallbackRect = detailFallbackGo.GetComponent<RectTransform>();
+        detailFallbackRect.anchorMin = Vector2.zero;
+        detailFallbackRect.anchorMax = Vector2.one;
+        detailFallbackRect.sizeDelta = Vector2.zero;
+
+        _detailObjectIconFallback = detailFallbackGo.GetComponent<TextMeshProUGUI>();
+        _detailObjectIconFallback.text = "?";
+        _detailObjectIconFallback.fontSize = 22;
+        _detailObjectIconFallback.color = C_SECTION_HEADER;
+        _detailObjectIconFallback.fontStyle = FontStyles.Bold;
+        _detailObjectIconFallback.alignment = TextAlignmentOptions.Center;
+        _detailObjectIconFallback.raycastTarget = false;
+        detailFallbackGo.SetActive(false);
+
+        // Separate risk tile. This keeps the right side from feeling like empty space
+        // while keeping the content simple: just the label and the risk badge.
+        var riskTile = MakeCard("DetailRiskTile", summaryRow.transform, 128);
+        riskTile.GetComponent<LayoutElement>().flexibleWidth = 1;
+        RectTransform riskTileRect = riskTile.GetComponent<RectTransform>();
+
+        var riskLabel = MakeText(
+            "DetailRiskLabel",
+            riskTileRect,
+            "RISK LEVEL",
+            12,
+            C_SECTION_HEADER,
+            FontStyles.Bold,
+            new Vector2(0, 1),
+            new Vector2(1, 1),
+            new Vector2(16, -42),
+            new Vector2(-16, -20)
+        );
+        riskLabel.alignment = TextAlignmentOptions.Center;
+        riskLabel.characterSpacing = 2f;
 
         _detailRiskBadgeBg = MakeBadge(
             "DetailRiskBadge",
-            riskCardRect,
+            riskTileRect,
             "High risk",
             C_HIGH_BADGE_BG,
             C_HIGH_BADGE_TEXT,
-            new Vector2(1, 1),
-            new Vector2(-20, -18),
-            new Vector2(130, 34),
+            new Vector2(0.5f, 0.5f),
+            new Vector2(0, -10),
+            new Vector2(150, 36),
             13
         );
 
         _detailRiskBadgeText = _detailRiskBadgeBg.GetComponentInChildren<TextMeshProUGUI>();
-
-        var detailRiskExplanation = MakeText(
-            "DetailRiskExplanation",
-            riskCardRect,
-            "Based on this object's potential to hold standing water.",
-            13,
-            C_SUBTEXT,
-            FontStyles.Normal,
-            new Vector2(0, 1),
-            new Vector2(1, 1),
-            new Vector2(20, -94),
-            new Vector2(-20, -58)
-        );
-        detailRiskExplanation.alignment = TextAlignmentOptions.TopLeft;
-        detailRiskExplanation.enableWordWrapping = true;
 
         // ─────────────────────────────────────────────────────────────────
         // WHY IT'S A RISK
@@ -792,6 +878,10 @@ public class ReportUIBuilder : MonoBehaviour
             C_CARD_BORDER
         );
 
+        // Match the original green used behind the imported object icons (#2E583D).
+        // Shape, size, and outline stay the same.
+        StyleButtonAsCard(prevBtn, C_ICON_BG, C_TEXT_PRIMARY);
+
         prevBtn.GetComponent<Button>().onClick.AddListener(() =>
         {
             if (_detailIndex > 0)
@@ -800,20 +890,22 @@ public class ReportUIBuilder : MonoBehaviour
             }
         });
 
-        SetRounded(prevBtn.GetComponent<Image>(), 12);
-
         var nextBtn = MakeButton(
             "NextBtn",
             navRect,
             "Next Item →",
-            C_BTN_FILLED_TEXT,
+            C_BTN_FILLED_BG,
             15,
             Vector2.zero,
             Vector2.one,
             Vector2.zero,
             new Vector2(0, 48),
-            C_BTN_FILLED_BG
+            C_CARD_BORDER
         );
+
+        // Keep the green card-style outline, but bring back the original teal fill
+        // so Next reads as the primary action again.
+        StyleButtonAsCard(nextBtn, C_BTN_FILLED_BG, C_BTN_FILLED_TEXT);
 
         nextBtn.GetComponent<Button>().onClick.AddListener(() =>
         {
@@ -822,8 +914,6 @@ public class ReportUIBuilder : MonoBehaviour
                 ShowItemDetail(_detailIndex + 1);
             }
         });
-
-        SetRounded(nextBtn.GetComponent<Image>(), 12);
     }
 
     void CreateDetectedItemCard(Transform parent, DetectionWithDetails d, int index)
@@ -1100,17 +1190,54 @@ public class ReportUIBuilder : MonoBehaviour
     // creating a thin border/outline effect around the card edges.
     static Image AddCardFill(Transform cardTransform, float inset, Color fillColor)
     {
-        var fill = new GameObject("Fill", typeof(RectTransform), typeof(Image));
-        fill.transform.SetParent(cardTransform, false);
+        return AddInsetFill(cardTransform, "Fill", inset, fillColor, 14.5f);
+    }
+
+    static Image AddInsetFill(Transform targetTransform, string name, float inset, Color fillColor, float radius)
+    {
+        var fill = new GameObject(name, typeof(RectTransform), typeof(Image));
+        fill.transform.SetParent(targetTransform, false);
 
         RectTransform fRect = fill.GetComponent<RectTransform>();
         SetAnchors(fRect, Vector2.zero, Vector2.one, new Vector2(inset, inset), new Vector2(-inset, -inset));
 
         Image img = fill.GetComponent<Image>();
         img.color = fillColor;
-        SetRounded(img, 14.5f);
+        SetRounded(img, radius);
 
         return img;
+    }
+
+    static void StyleButtonAsCard(GameObject buttonGo, Color fillColor, Color textColor)
+    {
+        if (buttonGo == null)
+        {
+            return;
+        }
+
+        Image border = buttonGo.GetComponent<Image>();
+        if (border != null)
+        {
+            border.color = C_CARD_BORDER;
+            SetRounded(border, 12);
+        }
+
+        Image fill = AddInsetFill(buttonGo.transform, "ButtonFill", 1.5f, fillColor, 10.5f);
+        fill.raycastTarget = true;
+        fill.transform.SetAsFirstSibling();
+
+        Button btn = buttonGo.GetComponent<Button>();
+        if (btn != null)
+        {
+            btn.targetGraphic = fill;
+        }
+
+        TextMeshProUGUI label = buttonGo.GetComponentInChildren<TextMeshProUGUI>();
+        if (label != null)
+        {
+            label.color = textColor;
+            label.fontStyle = FontStyles.Normal;
+        }
     }
 
     static void MakeSectionLabel(string text, Transform parent)
