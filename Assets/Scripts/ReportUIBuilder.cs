@@ -1693,52 +1693,38 @@ public class ReportUIBuilder : MonoBehaviour
 
         label = label.ToLowerInvariant();
 
-        // High based on the table:
-        // Bromiliads has a High row for "Remove".
+        // High risk:
+        // These objects commonly hold standing water or create strong mosquito-breeding conditions.
         if (
-            label.Contains("ss_bromiliad")
+            label.Contains("ss_bucket") ||
+            label.Contains("ss_tire") ||
+            label.Contains("ss_bromiliad") ||
+            label.Contains("ss_inflatablepool") ||
+            label.Contains("ss_waterhyacinth") ||
+            label.Contains("ss_waterlettuce")
         )
         {
             return "High";
         }
 
-        // Medium based on the table:
-        // Tires = Medium
-        // Planters/empty pots = Medium for drill drainage hole
-        // Water Hyacinths = Medium
-        // Water Lettuce = Medium
-        // Trash cans = Medium for drill drainage hole
-        // Grill = Medium
+        // Moderate risk:
+        // These can still breed mosquitoes, but the risk depends more on whether
+        // they are holding water, neglected, uncovered, or stored incorrectly.
         if (
-            label.Contains("ss_tire") ||
+            label.Contains("ss_birdbath") ||
             label.Contains("ss_pot") ||
-            label.Contains("ss_waterhyacinth") ||
-            label.Contains("ss_waterlettuce") ||
             label.Contains("ss_trashcan") ||
+            label.Contains("ss_treehole") ||
+            label.Contains("ss_wheelbarrow") ||
+            label.Contains("ss_wateringcan") ||
             label.Contains("ss_grill")
         )
         {
             return "Moderate";
         }
 
-        // Low based on the table:
-        // Treehole = Low
-        // Pool, inflatable = Low
-        // Birdbaths = Low
-        // Wheelbarrows = Low
-        // Watering cans = Low
-        if (
-            label.Contains("ss_treehole") ||
-            label.Contains("ss_inflatablepool") ||
-            label.Contains("ss_birdbath") ||
-            label.Contains("ss_wheelbarrow") ||
-            label.Contains("ss_wateringcan")
-        )
-        {
-            return "Low";
-        }
-
-        // Bucket is not visible in the table screenshot, so leave unknowns as Low.
+        // Unknown labels default to Low so the UI does not overstate risk for
+        // classes that are not part of the current mosquito-breeding object list.
         return "Low";
     }
 
@@ -1749,29 +1735,31 @@ public class ReportUIBuilder : MonoBehaviour
             return "Low";
         }
 
-        bool anyHigh = false;
-        bool anyModerate = false;
+        int moderateCount = 0;
 
         foreach (DetectionWithDetails d in detections)
         {
             string risk = GetRiskLevel(d.label);
 
+            // Any high-risk item makes the whole scan high risk.
             if (risk == "High")
             {
-                anyHigh = true;
+                return "High";
             }
-            else if (risk == "Moderate")
+
+            if (risk == "Moderate")
             {
-                anyModerate = true;
+                moderateCount++;
             }
         }
 
-        if (anyHigh)
+        // Two or more moderate-risk detections also make the whole scan high risk.
+        if (moderateCount >= 2)
         {
             return "High";
         }
 
-        if (anyModerate)
+        if (moderateCount == 1)
         {
             return "Moderate";
         }
