@@ -1817,10 +1817,12 @@ public class ReportUIBuilder : MonoBehaviour
         if (label.Contains("ss_wateringcan")) return "Icons/icon_wateringcan";
         if (label.Contains("ss_wheelbarrow")) return "Icons/icon_wheelbarrow";
 
-        // These three do not have separate imported icons yet, so use the plant pot icon as a clean fallback.
-        if (label.Contains("ss_bromiliad")) return "Icons/icon_pot";
-        if (label.Contains("ss_waterhyacinth")) return "Icons/icon_pot";
-        if (label.Contains("ss_waterlettuce")) return "Icons/icon_pot";
+        // Newly imported plant icons.
+        // These paths must match the file names in Assets/Resources/Icons exactly,
+        // without the .png extension.
+        if (label.Contains("ss_bromiliad")) return "Icons/icon_bromilliad";
+        if (label.Contains("ss_waterhyacinth")) return "Icons/icon_waterhyacynth";
+        if (label.Contains("ss_waterlettuce")) return "Icons/icon_waterlettuce";
 
         return "";
     }
