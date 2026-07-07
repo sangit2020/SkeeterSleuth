@@ -499,7 +499,7 @@ public class ReportUIBuilder : MonoBehaviour
             {
                 _reportListPanel.SetActive(false);
             },
-            "Full report",
+            "Full Report",
             out unusedTitle,
             out _listReportSubtitle
         );
@@ -677,7 +677,7 @@ public class ReportUIBuilder : MonoBehaviour
         MakeFixedHeader(
             "Header",
             root,
-            "← Full report",
+            "← Full Report",
             () =>
             {
                 _itemDetailPanel.SetActive(false);
@@ -750,8 +750,8 @@ public class ReportUIBuilder : MonoBehaviour
             detailSpriteRect,
             Vector2.zero,
             Vector2.one,
-            new Vector2(3f, 3f),
-            new Vector2(-3f, -3f)
+            new Vector2(9f, 9f),
+            new Vector2(-9f, -9f)
         );
 
         _detailObjectIconImageObject = detailSpriteGo;
@@ -976,8 +976,8 @@ public class ReportUIBuilder : MonoBehaviour
                 spriteRect,
                 Vector2.zero,
                 Vector2.one,
-                new Vector2(7f, 7f),
-                new Vector2(-7f, -7f)
+                new Vector2(9f, 9f),
+                new Vector2(-9f, -9f)
             );
 
             Image spriteImg = spriteGo.GetComponent<Image>();
@@ -1806,23 +1806,23 @@ public class ReportUIBuilder : MonoBehaviour
 
         label = label.ToLowerInvariant();
 
-        if (label.Contains("ss_birdbath")) return "Icons/icon_birdbath";
-        if (label.Contains("ss_bucket")) return "Icons/icon_bucket";
-        if (label.Contains("ss_grill")) return "Icons/icon_grill";
-        if (label.Contains("ss_inflatablepool")) return "Icons/icon_pool";
-        if (label.Contains("ss_pot")) return "Icons/icon_pot";
-        if (label.Contains("ss_tire")) return "Icons/icon_tire";
-        if (label.Contains("ss_trashcan")) return "Icons/icon_trash";
-        if (label.Contains("ss_treehole")) return "Icons/icon_treehole";
-        if (label.Contains("ss_wateringcan")) return "Icons/icon_wateringcan";
-        if (label.Contains("ss_wheelbarrow")) return "Icons/icon_wheelbarrow";
+        if (label.Contains("ss_birdbath")) return "Icons/icon_birdbath_bg_2e583d";
+        if (label.Contains("ss_bucket")) return "Icons/icon_bucket_bg_2e583d";
+        if (label.Contains("ss_grill")) return "Icons/icon_grill_bg_2e583d";
+        if (label.Contains("ss_inflatablepool")) return "Icons/icon_pool_bg_2e583d";
+        if (label.Contains("ss_pot")) return "Icons/icon_pot_bg_2e583d";
+        if (label.Contains("ss_tire")) return "Icons/icon_tire_bg_2e583d";
+        if (label.Contains("ss_trashcan")) return "Icons/icon_trash_bg_2e583d";
+        if (label.Contains("ss_treehole")) return "Icons/icon_treehole_bg_2e583d";
+        if (label.Contains("ss_wateringcan")) return "Icons/icon_wateringcan_bg_2e583d";
+        if (label.Contains("ss_wheelbarrow")) return "Icons/icon_wheelbarrow_bg_2e583d";
 
         // Newly imported plant icons.
         // These paths must match the file names in Assets/Resources/Icons exactly,
         // without the .png extension.
-        if (label.Contains("ss_bromiliad")) return "Icons/icon_bromilliad";
-        if (label.Contains("ss_waterhyacinth")) return "Icons/icon_waterhyacynth";
-        if (label.Contains("ss_waterlettuce")) return "Icons/icon_waterlettuce";
+        if (label.Contains("ss_bromiliad")) return "Icons/icon_bromilliad_bg_2e583d";
+        if (label.Contains("ss_waterhyacinth")) return "Icons/icon_waterhyacynth_bg_2e583d";
+        if (label.Contains("ss_waterlettuce")) return "Icons/icon_waterlettuce_bg_2e583d";
 
         return "";
     }

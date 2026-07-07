@@ -315,7 +315,7 @@ public class ScanHistoryUIBuilder : MonoBehaviour
         titleRect.anchorMax         = new Vector2(1f, 1f);
         titleRect.offsetMin         = new Vector2(CardSideMargin, 36f);
         titleRect.offsetMax         = new Vector2(-CardSideMargin, -52f);
-        title.text                  = "Scan history";
+        title.text                  = "Scan History";
         title.fontSize              = 32f;
         title.color                 = TitleWhite;
         title.fontStyle             = FontStyles.Bold;
