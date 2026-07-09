@@ -31,7 +31,9 @@ public class YOLOInference : MonoBehaviour
     {
         runtimeModel = Unity.InferenceEngine.ModelLoader.Load(modelAsset);
         worker = new Unity.InferenceEngine.Worker(runtimeModel, Unity.InferenceEngine.BackendType.CPU);
+#if UNITY_EDITOR
         Debug.Log("YOLO model loaded successfully!");
+#endif
     }
 
     void OnEnable()
@@ -56,7 +58,9 @@ public class YOLOInference : MonoBehaviour
     {
         if (!cameraManager.TryAcquireLatestCpuImage(out var cpuImage))
         {
+#if UNITY_EDITOR
             Debug.Log("[YOLOInference] RunInference: TryAcquireLatestCpuImage FAILED this frame - no CPU image acquired, inference did not run.");
+#endif
             return;
         }
 
@@ -161,10 +165,12 @@ public class YOLOInference : MonoBehaviour
                     }
                 }
             }
+#if UNITY_EDITOR
             Debug.Log($"[YOLOInference] RunInference ran: cpuImage={cpuImage.width}x{cpuImage.height} " +
                       $"outputShape={outputShape} numDetections={numDetections} numClasses={numClasses} " +
                       $"maxRawConfidence={maxRawConfidence:F4} (threshold={CONFIDENCE_THRESHOLD:F2}) " +
                       $"bestClass={GetLabel(maxRawClassId)} t={Time.time:F2}");
+#endif
 
             var rawDetections = ParseDetections(outputData, numDetections, stride);
             currentDetections = ApplyNMS(rawDetections);
@@ -174,8 +180,10 @@ public class YOLOInference : MonoBehaviour
                 scanManager.RegisterDetections(currentDetections);
             }
 
+#if UNITY_EDITOR
             if (currentDetections.Count > 0)
                 Debug.Log($"Detections this frame: {currentDetections.Count}");
+#endif
         }
     }
 

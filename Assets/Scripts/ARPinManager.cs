@@ -15,7 +15,7 @@ public class ARPinManager : MonoBehaviour
     [Header("Settings")]
     public float confidenceThreshold = 0.70f;
     public float pinDepth = 1.5f;
-    public bool verboseLogging = true;
+    public bool verboseLogging = false;
 
     private struct CameraPose
     {
@@ -80,6 +80,7 @@ public class ARPinManager : MonoBehaviour
                 detectionFrameCount[key] = 0;
             detectionFrameCount[key]++;
 
+#if UNITY_EDITOR
             if (verboseLogging)
             {
                 Debug.Log($"[ARPinManager] update key={key} count={detectionFrameCount[key]}/{requiredFrames} " +
@@ -87,6 +88,7 @@ public class ARPinManager : MonoBehaviour
                           $"camPos={arCamera.transform.position:F3} camRotEuler={arCamera.transform.rotation.eulerAngles:F1} " +
                           $"screenOrientation={Screen.orientation}");
             }
+#endif
 
             if (detectionFrameCount[key] < requiredFrames) continue;
 
@@ -143,6 +145,7 @@ public class ARPinManager : MonoBehaviour
             // that rotation direction is the next thing to check, not this flip.
             float screenY = (1f - coverMappedY) * convH;
 
+#if UNITY_EDITOR
             if (verboseLogging)
             {
                 Debug.Log($"[ARPinManager] PLACEMENT key={key}\n" +
@@ -163,15 +166,18 @@ public class ARPinManager : MonoBehaviour
                           $"  camPos drift over latency  = {Vector3.Distance(pose.position, arCamera.transform.position):F4} m\n" +
                           $"  camRot drift over latency  = {Quaternion.Angle(pose.rotation, arCamera.transform.rotation):F2} deg");
             }
+#endif
 
             Ray ray = ScreenPointToRayFromPose(screenX, screenY, pose.position, pose.rotation);
             Vector3 pinPosition = ray.origin + ray.direction * pinDepth;
 
+#if UNITY_EDITOR
             if (verboseLogging)
             {
                 Debug.Log($"[ARPinManager] ray key={key} origin={ray.origin:F3} dir={ray.direction:F3} " +
                           $"pinDepth={pinDepth:F2} -> pinPosition={pinPosition:F3}");
             }
+#endif
 
             GameObject pin = Instantiate(pinPrefab, pinPosition, Quaternion.identity);
             var controller = pin.GetComponent<PinController>();
@@ -182,7 +188,10 @@ public class ARPinManager : MonoBehaviour
             if (scanManager != null)
                 scanManager.RegisterDetection(det.label);
 
-            Debug.Log($"Pin placed: {key} conf={latest.confidence:F2} screen=({screenX:F0},{screenY:F0}) world={pinPosition:F3}");
+#if UNITY_EDITOR
+            if (verboseLogging)
+                Debug.Log($"Pin placed: {key} conf={latest.confidence:F2} screen=({screenX:F0},{screenY:F0}) world={pinPosition:F3}");
+#endif
         }
     }
 
@@ -206,7 +215,9 @@ public class ARPinManager : MonoBehaviour
         detectionFrameCount.Clear();
         latestDetection.Clear();
         latestDetectionCameraPose.Clear();
+#if UNITY_EDITOR
         Debug.Log("All pins cleared");
+#endif
     }
 
     void OnDestroy()

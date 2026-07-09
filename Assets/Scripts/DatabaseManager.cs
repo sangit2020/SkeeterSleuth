@@ -9,10 +9,6 @@ public class DatabaseManager : MonoBehaviour
 {
     public static DatabaseManager Instance { get; private set; }
 
-    [Header("Testing")]
-    [Tooltip("Turn this on only when testing. Turn it off after confirming mock data saves.")]
-    [SerializeField] private bool runMockScanOnStart = false;
-
     private SQLiteConnection db;
 
     private string DatabasePath
@@ -36,18 +32,6 @@ public class DatabaseManager : MonoBehaviour
         DontDestroyOnLoad(gameObject);
 
         InitializeDatabase();
-
-#if UNITY_EDITOR
-        if (runMockScanOnStart)
-        {
-            SaveMockScan();
-        }
-#else
-        if (runMockScanOnStart)
-        {
-            Debug.LogWarning("[DatabaseManager] runMockScanOnStart is enabled but ignored in non-Editor builds.");
-        }
-#endif
     }
 
     private void OnDestroy()
@@ -405,66 +389,6 @@ public class DatabaseManager : MonoBehaviour
         Debug.Log("[DatabaseManager] Scan history cleared.");
     }
 
-    public void SaveMockScan()
-    {
-#if !UNITY_EDITOR
-        Debug.LogWarning("[DatabaseManager] SaveMockScan() was called in a non-Editor build and was ignored.");
-        return;
-#else
-        int reportId = SaveReport(
-            durationSeconds: 45,
-            totalObjectsDetected: 3,
-            notes: "Mock scan for database testing."
-        );
-
-        SaveDetection(
-            reportId: reportId,
-            objectLabel: "ss_bucket",
-            bboxX: 0.25f,
-            bboxY: 0.30f,
-            bboxW: 0.15f,
-            bboxH: 0.20f,
-            screenshotPath: "Screenshots/mock_bucket.png"
-        );
-
-        SaveDetection(
-            reportId: reportId,
-            objectLabel: "ss_tire",
-            bboxX: 0.55f,
-            bboxY: 0.40f,
-            bboxW: 0.25f,
-            bboxH: 0.25f,
-            screenshotPath: "Screenshots/mock_tire.png"
-        );
-
-        SaveDetection(
-            reportId: reportId,
-            objectLabel: "ss_birdbath",
-            bboxX: 0.40f,
-            bboxY: 0.60f,
-            bboxW: 0.20f,
-            bboxH: 0.18f,
-            screenshotPath: "Screenshots/mock_birdbath.png"
-        );
-
-        List<DetectionWithDetails> savedDetections = GetDetectionsForReport(reportId);
-
-        Debug.Log("Mock scan saved with Report ID: " + reportId);
-        Debug.Log("Mock scan detection count from database: " + savedDetections.Count);
-
-        foreach (DetectionWithDetails detection in savedDetections)
-        {
-            Debug.Log(
-                "Detection loaded from DB: " +
-                detection.display_name +
-                " | " +
-                detection.object_description +
-                " | Fix: " +
-                detection.mitigation_description
-            );
-        }
-#endif
-    }
 }
 
 [Serializable]

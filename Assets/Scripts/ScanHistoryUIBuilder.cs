@@ -31,10 +31,6 @@ public class ScanHistoryUIBuilder : MonoBehaviour
     [Tooltip("Assign the root Canvas. Leave null to auto-find.")]
     public Canvas targetCanvas;
 
-    [Header("Debug")]
-    [Tooltip("When true, injects fake rows so you can preview without a real DB.")]
-    public bool useMockDataForDebugging = false;
-
     // ──────────────────────────────────────────────
     //  Brand palette  (matches Prevention Tips screen)
     // ──────────────────────────────────────────────
@@ -656,18 +652,6 @@ public class ScanHistoryUIBuilder : MonoBehaviour
 
     List<ScanReport> FetchReports()
     {
-#if UNITY_EDITOR
-        if (useMockDataForDebugging)
-        {
-            return GetMockReports();
-        }
-#else
-        if (useMockDataForDebugging)
-        {
-            Debug.LogWarning("[ScanHistoryUIBuilder] useMockDataForDebugging is enabled but ignored in non-Editor builds.");
-        }
-#endif
-
         if (DatabaseManager.Instance == null)
         {
             Debug.LogWarning("[ScanHistoryUIBuilder] DatabaseManager.Instance is null.");
@@ -761,21 +745,6 @@ public class ScanHistoryUIBuilder : MonoBehaviour
         string durStr  = FormatDuration(durationSeconds);
         string itemStr = itemCount == 1 ? "1 item" : $"{itemCount} items";
         return $"{durStr} \u2022 {itemStr}";
-    }
-
-    // ══════════════════════════════════════════════
-    //  Mock data (debug only — useMockDataForDebugging = false by default)
-    // ══════════════════════════════════════════════
-
-    List<ScanReport> GetMockReports()
-    {
-        return new List<ScanReport>
-        {
-            new ScanReport { id = 1, scanned_at = "2026-06-07T10:30:00", duration_seconds = 47, total_objects_detected = 3 },
-            new ScanReport { id = 2, scanned_at = "2026-05-30T14:22:00", duration_seconds = 52, total_objects_detected = 2 },
-            new ScanReport { id = 3, scanned_at = "2026-05-22T09:11:00", duration_seconds = 38, total_objects_detected = 1 },
-            new ScanReport { id = 4, scanned_at = "2026-05-15T16:45:00", duration_seconds = 61, total_objects_detected = 4 },
-        };
     }
 
     // ══════════════════════════════════════════════

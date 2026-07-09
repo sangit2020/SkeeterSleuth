@@ -26,12 +26,6 @@ public class ReportUIBuilder : MonoBehaviour
     [Header("Canvas — auto-found if left empty")]
     public Canvas targetCanvas;
 
-    [Header("Debug / Authoring Only")]
-    [Tooltip("Enable ONLY for UI layout testing when no real scans exist in the database.")]
-    public bool useMockDataForUIDebugging = false;
-
-    const float PLACEHOLDER_CONFIDENCE = 0.85f;
-
     // ─── Color palette ────────────────────────────────────────────────────────
     static readonly Color C_BG             = HexColor("#1D2E1F"); // Main app background
     static readonly Color C_HEADER_BG      = HexColor("#2C5A3D"); // Top/header background
@@ -119,13 +113,6 @@ public class ReportUIBuilder : MonoBehaviour
 
     public void ShowLatestReport()
     {
-        if (useMockDataForUIDebugging)
-        {
-            LoadMockData(out var mockReport, out var mockDetections);
-            DisplayReport(mockReport, mockDetections);
-            return;
-        }
-
         List<ScanReport> allReports = null;
 
         try
@@ -151,13 +138,6 @@ public class ReportUIBuilder : MonoBehaviour
 
     public void ShowReport(int reportId)
     {
-        if (useMockDataForUIDebugging)
-        {
-            LoadMockData(out var mockReport, out var mockDetections);
-            DisplayReport(mockReport, mockDetections);
-            return;
-        }
-
         ScanReport report = null;
         List<DetectionWithDetails> detections = null;
 
@@ -1851,54 +1831,5 @@ public class ReportUIBuilder : MonoBehaviour
         if (label.Contains("waterlettuce")) return "WL";
 
         return "?";
-    }
-
-    static void LoadMockData(out ScanReport report, out List<DetectionWithDetails> detections)
-    {
-        report = new ScanReport
-        {
-            id = -1,
-            scanned_at = new DateTime(2026, 6, 7).ToString("o"),
-            duration_seconds = 47,
-            total_objects_detected = 3,
-            notes = "[UI debug mock — not a real scan]"
-        };
-
-        detections = new List<DetectionWithDetails>
-        {
-            new DetectionWithDetails
-            {
-                detection_id = 1,
-                report_id = -1,
-                display_name = "Bucket",
-                label = "ss_bucket",
-                object_description = "Buckets can collect rainwater and become mosquito breeding sites when left outside.",
-                mitigation_description = "Empty the bucket after rain\nStore it upside down\nKeep it covered when not in use",
-                screenshot_path = "",
-                detected_at = DateTime.Now.ToString("o")
-            },
-            new DetectionWithDetails
-            {
-                detection_id = 2,
-                report_id = -1,
-                display_name = "Tire",
-                label = "ss_tire",
-                object_description = "Tires can trap rainwater and are one of the most common outdoor mosquito breeding sites.",
-                mitigation_description = "Drain all standing water\nStore tires indoors or under cover\nDispose of unused tires properly",
-                screenshot_path = "",
-                detected_at = DateTime.Now.ToString("o")
-            },
-            new DetectionWithDetails
-            {
-                detection_id = 3,
-                report_id = -1,
-                display_name = "Bird Bath",
-                label = "ss_birdbath",
-                object_description = "Bird baths can hold standing water and become mosquito breeding sites if the water is not changed regularly.",
-                mitigation_description = "Empty and scrub the bird bath regularly\nChange the water at least once a week\nKeep the basin clean to prevent mosquito larvae",
-                screenshot_path = "",
-                detected_at = DateTime.Now.ToString("o")
-            }
-        };
     }
 }

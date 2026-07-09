@@ -45,11 +45,15 @@ public class PinController : MonoBehaviour, IPointerClickHandler
 
     public void OnPointerClick(PointerEventData eventData)
     {
+#if UNITY_EDITOR
         Debug.Log("PIN TAPPED - this should always print if tap registers");
+#endif
 
         if (FixSheetManager.Instance == null)
         {
+#if UNITY_EDITOR
             Debug.Log("PIN TAPPED but FixSheetManager.Instance is NULL");
+#endif
             return;
         }
 
@@ -57,7 +61,9 @@ public class PinController : MonoBehaviour, IPointerClickHandler
             ? ScanManager.Instance.GetCountForLabel(detectionLabel)
             : 1;
 
+#if UNITY_EDITOR
         Debug.Log("Calling OpenForLabel with label=" + detectionLabel + " count=" + count);
+#endif
 
         FixSheetManager.Instance.OpenForLabel(detectionLabel, detectionConfidence, count);
     }
