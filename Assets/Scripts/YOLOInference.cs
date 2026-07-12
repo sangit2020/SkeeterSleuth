@@ -14,10 +14,29 @@ public class YOLOInference : MonoBehaviour
     private Unity.InferenceEngine.Worker worker;
 
     const int INPUT_SIZE = 640;
-    const float CONFIDENCE_THRESHOLD = 0.70f;
-    const float NMS_IOU_THRESHOLD = 0.45f;
+
+    [Header("Detection Filtering")]
+    [Tooltip("Low-level model cutoff. Final pins/reports use a stricter threshold in ARPinManager.")]
+    [Range(0f, 1f)]
+    public float rawConfidenceThreshold = 0.80f;
+
+    [Range(0f, 1f)]
+    public float nmsIouThreshold = 0.45f;
+
+    [Tooltip("When enabled, overlapping boxes of different classes compete and only the strongest survives.")]
+    public bool classAgnosticNms = true;
+
+    [Tooltip("Limits CPU inference frequency. 0.12 seconds is about 8 inferences per second.")]
+    [Min(0f)]
+    public float inferenceIntervalSeconds = 0.12f;
 
     public List<DetectionResult> currentDetections = new List<DetectionResult>();
+
+    // Incremented once for each completed inference result. Consumers use this
+    // so one YOLO result cannot be counted multiple times across Unity Update frames.
+    public int DetectionFrameId { get; private set; }
+
+    private float nextInferenceTime;
 
     // Raw sensor dimensions of the most recently processed camera frame (e.g.
     // 1920x1440, landscape sensor mount), before the 90-degree rotation below.
@@ -51,6 +70,10 @@ public class YOLOInference : MonoBehaviour
     void OnCameraFrameReceived(ARCameraFrameEventArgs args)
     {
         if (scanManager != null && !scanManager.IsScanning()) return;
+
+        if (Time.unscaledTime < nextInferenceTime) return;
+        nextInferenceTime = Time.unscaledTime + Mathf.Max(0f, inferenceIntervalSeconds);
+
         RunInference();
     }
 
@@ -168,17 +191,17 @@ public class YOLOInference : MonoBehaviour
 #if UNITY_EDITOR
             Debug.Log($"[YOLOInference] RunInference ran: cpuImage={cpuImage.width}x{cpuImage.height} " +
                       $"outputShape={outputShape} numDetections={numDetections} numClasses={numClasses} " +
-                      $"maxRawConfidence={maxRawConfidence:F4} (threshold={CONFIDENCE_THRESHOLD:F2}) " +
+                      $"maxRawConfidence={maxRawConfidence:F4} (rawThreshold={rawConfidenceThreshold:F2}) " +
                       $"bestClass={GetLabel(maxRawClassId)} t={Time.time:F2}");
 #endif
 
             var rawDetections = ParseDetections(outputData, numDetections, stride);
             currentDetections = ApplyNMS(rawDetections);
+            DetectionFrameId++;
 
-            if (scanManager != null && currentDetections.Count > 0)
-            {
-                scanManager.RegisterDetections(currentDetections);
-            }
+            // IMPORTANT: raw detections are not saved here. ARPinManager confirms
+            // confidence, spatial consistency, consecutive inference frames, and
+            // camera stability before registering anything with ScanManager.
 
 #if UNITY_EDITOR
             if (currentDetections.Count > 0)
@@ -206,7 +229,7 @@ public class YOLOInference : MonoBehaviour
                 }
             }
 
-            if (confidence < CONFIDENCE_THRESHOLD) continue;
+            if (confidence < rawConfidenceThreshold) continue;
 
             float cx = output[0 * numDetections + i];
             float cy = output[1 * numDetections + i];
@@ -239,7 +262,8 @@ public class YOLOInference : MonoBehaviour
             detections.RemoveAt(0);
 
             detections.RemoveAll(d =>
-                d.label == best.label && IoU(best, d) > NMS_IOU_THRESHOLD);
+                (classAgnosticNms || d.label == best.label) &&
+                IoU(best, d) > nmsIouThreshold);
         }
 
         return kept;

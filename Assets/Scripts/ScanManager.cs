@@ -130,8 +130,8 @@ public class ScanManager : MonoBehaviour
             return;
         }
 
-        // Grab whatever YOLO currently sees before stopping.
-        PullLatestYoloDetectionsOnce();
+        // Do not pull the latest raw YOLO frame here. Only detections confirmed
+        // by ARPinManager are allowed into the report/database pipeline.
 
         int duration = Mathf.RoundToInt(Time.time - scanStartTime);
 
