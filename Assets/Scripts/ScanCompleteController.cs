@@ -29,6 +29,9 @@ public class ScanCompleteController : MonoBehaviour
     // This is Chip_Tire — used as a template. Script duplicates it per item.
     public GameObject chipTemplate;
 
+    // ScrollRect on ItemChipsRow, found via chipsContent's hierarchy.
+    ScrollRect chipsScrollRect;
+
     [Header("What To Do Cards")]
     // This is the Content object inside WhatToDoScrollView > Viewport > Content
     public Transform fixBlocksContent;
@@ -57,6 +60,9 @@ void Awake()
 
     if (fixBlockTemplate != null)
         fixBlockTemplate.SetActive(false);
+
+    if (chipsContent != null)
+        chipsScrollRect = chipsContent.GetComponentInParent<ScrollRect>();
 }
 
 void Start()
@@ -195,20 +201,50 @@ void Start()
             Destroy(child.gameObject);
         }
 
-        if (items.Count == 0) return;
-
         foreach (var item in items)
         {
             // Duplicate the template
             GameObject chip = Instantiate(chipTemplate, chipsContent);
             chip.SetActive(true);
 
-            // Find Label and Count text children by name
+            // Find Icon, Label and Count children by name
+            Image iconImg = chip.transform.Find("Icon")?.GetComponent<Image>();
             TextMeshProUGUI labelTm = chip.transform.Find("Label")?.GetComponent<TextMeshProUGUI>();
             TextMeshProUGUI countTm = chip.transform.Find("Count")?.GetComponent<TextMeshProUGUI>();
 
+            if (iconImg != null)
+            {
+                Sprite iconSprite = ReportUIBuilder.LoadObjectIconPublic(item.label);
+                if (iconSprite != null) iconImg.sprite = iconSprite;
+            }
             if (labelTm != null) labelTm.text = item.displayName;
             if (countTm != null) countTm.text = "×" + item.count;
+        }
+
+        ResetChipsScrollPosition();
+    }
+
+    // The Content Size Fitter only recalculates content width during the
+    // next canvas layout pass. Force that pass now so the ScrollRect sees
+    // the new width immediately, then snap scroll back to flush-left.
+    // Without this, a scroll offset left over from a wider chip set (from
+    // a previous scan) persists; combined with Unity's elastic bounds
+    // correction, that stale offset can align the new content's *right*
+    // edge to the viewport instead of the left, clipping the start of a
+    // single narrow chip off-screen.
+    void ResetChipsScrollPosition()
+    {
+        if (chipsContent is RectTransform contentRect)
+            LayoutRebuilder.ForceRebuildLayoutImmediate(contentRect);
+
+        if (chipsScrollRect != null)
+        {
+            chipsScrollRect.StopMovement();
+            chipsScrollRect.horizontalNormalizedPosition = 0f;
+        }
+        else if (chipsContent is RectTransform fallbackRect)
+        {
+            fallbackRect.anchoredPosition = new Vector2(0f, fallbackRect.anchoredPosition.y);
         }
     }
 

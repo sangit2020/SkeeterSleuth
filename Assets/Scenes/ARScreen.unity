@@ -6734,7 +6734,11 @@ MonoBehaviour:
   arCamera: {fileID: 2512387468973847745}
   pinPrefab: {fileID: 1384458562331883140, guid: 3e54505fe2227458ca17b9256c38f2f4, type: 3}
   scanManager: {fileID: 144995574}
-  confidenceThreshold: 0.7
+  minimumPinConfidence: 0.88
+  requiredConsecutiveInferenceFrames: 3
+  minimumTrackingIoU: 0.25
+  maximumRotationBetweenFrames: 12
+  maximumTranslationBetweenFrames: 0.15
   pinDepth: 1.5
   verboseLogging: 1
 --- !u!4 &1318251415
@@ -9419,6 +9423,10 @@ MonoBehaviour:
   modelAsset: {fileID: 5022602860645237092, guid: c27435140fa42486aa76c21427746e7e, type: 3}
   cameraManager: {fileID: 2512387468973847747}
   scanManager: {fileID: 144995574}
+  rawConfidenceThreshold: 0.8
+  nmsIouThreshold: 0.45
+  classAgnosticNms: 1
+  inferenceIntervalSeconds: 0.12
 --- !u!4 &2038752591
 Transform:
   m_ObjectHideFlags: 0

@@ -1664,6 +1664,11 @@ public class ReportUIBuilder : MonoBehaviour
         return GetRiskLevel(label);
     }
 
+    public static Sprite LoadObjectIconPublic(string label)
+    {
+        return LoadObjectIcon(label);
+    }
+
     static string GetRiskLevel(string label)
     {
         if (string.IsNullOrWhiteSpace(label))
