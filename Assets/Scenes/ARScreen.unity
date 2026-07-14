@@ -8431,6 +8431,18 @@ MonoBehaviour:
           m_StringArgument: 
           m_BoolArgument: 0
         m_CallState: 2
+      - m_Target: {fileID: 8002250391710295128}
+        m_TargetAssemblyTypeName: LastScanCardController, Assembly-CSharp
+        m_MethodName: RefreshLastScanCard
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!114 &1772169618
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -11284,6 +11296,7 @@ GameObject:
   - component: {fileID: 8002250391710295127}
   - component: {fileID: 4508431309521883651}
   - component: {fileID: 1073479645227745239}
+  - component: {fileID: 8002250391710295128}
   m_Layer: 5
   m_Name: Background
   m_TagString: Untagged
@@ -17029,6 +17042,21 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1329754834295562981}
   m_CullTransparentMesh: 1
+--- !u!114 &8002250391710295128
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1329754834295562981}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3dc72032277214ed889c7a66bf5a0906, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LastScanCardController
+  dateText: {fileID: 1773758234117212054}
+  badgeText: {fileID: 296966886472262475}
+  metaText: {fileID: 5934698258113974044}
 --- !u!114 &8042739021195050863
 MonoBehaviour:
   m_ObjectHideFlags: 0
