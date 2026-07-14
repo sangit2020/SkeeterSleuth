@@ -5,7 +5,7 @@ public class PulseAnimator : MonoBehaviour
 {
     public float minAlpha = 0.3f;
     public float maxAlpha = 1f;
-    public float speed = 1.4f;
+    public float speed = 2.4f;
 
     private Image img;
 

@@ -154,9 +154,9 @@ public class FixSheetManager : MonoBehaviour
 
         sheetPanel.SetActive(true);
         StopAllCoroutines();
+        isOpen = true;
         StartCoroutine(AnimateSheet(true));
         StartCoroutine(UpdateScanStatusRow());
-        isOpen = true;
     }
 
     public void Close()
