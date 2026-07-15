@@ -896,8 +896,66 @@ public class ReportUIBuilder : MonoBehaviour
         });
     }
 
+    // Splits long item names across two balanced lines so they never run behind
+    // the risk badge or arrow. Names under 12 characters stay on one line.
+    static string FormatDetectedItemName(string rawName, out bool usesTwoLines)
+    {
+        usesTwoLines = false;
+
+        if (string.IsNullOrWhiteSpace(rawName))
+        {
+            return "Unknown";
+        }
+
+        string trimmed = string.Join(
+            " ",
+            rawName.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
+        );
+
+        if (trimmed.Length < 12 || !trimmed.Contains(" "))
+        {
+            return trimmed;
+        }
+
+        string[] words = trimmed.Split(' ');
+        if (words.Length < 2)
+        {
+            return trimmed;
+        }
+
+        // Pick the split that keeps both lines as close in length as possible.
+        int bestSplitIndex = 1;
+        int smallestDifference = int.MaxValue;
+
+        for (int i = 1; i < words.Length; i++)
+        {
+            string firstLine = string.Join(" ", words, 0, i);
+            string secondLine = string.Join(" ", words, i, words.Length - i);
+            int difference = Mathf.Abs(firstLine.Length - secondLine.Length);
+
+            if (difference < smallestDifference)
+            {
+                smallestDifference = difference;
+                bestSplitIndex = i;
+            }
+        }
+
+        usesTwoLines = true;
+
+        return string.Join(" ", words, 0, bestSplitIndex)
+            + "\n"
+            + string.Join(" ", words, bestSplitIndex, words.Length - bestSplitIndex);
+    }
+
     void CreateDetectedItemCard(Transform parent, DetectionWithDetails d, int index)
     {
+        string rawDisplayName = string.IsNullOrWhiteSpace(d.display_name)
+            ? d.label
+            : d.display_name;
+
+        string formattedDisplayName = FormatDetectedItemName(rawDisplayName, out bool usesTwoLines);
+        float cardHeight = usesTwoLines ? 96f : 80f;
+
         var card = new GameObject(
             "ItemCard_" + index,
             typeof(RectTransform),
@@ -907,7 +965,7 @@ public class ReportUIBuilder : MonoBehaviour
         );
 
         card.transform.SetParent(parent, false);
-        card.GetComponent<LayoutElement>().preferredHeight = 80;
+        card.GetComponent<LayoutElement>().preferredHeight = cardHeight;
 
         Image border = card.GetComponent<Image>();
         border.color = C_CARD_BORDER;
@@ -997,29 +1055,55 @@ public class ReportUIBuilder : MonoBehaviour
         nRect.anchorMin = new Vector2(0, 1);
         nRect.anchorMax = new Vector2(1, 1);
         nRect.pivot = new Vector2(0, 1);
-        nRect.anchoredPosition = new Vector2(86, -14);
-        nRect.sizeDelta = new Vector2(-166, 26);
+
+        // Reserve the right side of the card for the risk badge and arrow.
+        // Long names get a taller text area and a taller card.
+        if (usesTwoLines)
+        {
+            nRect.offsetMin = new Vector2(86, -58);
+            nRect.offsetMax = new Vector2(-132, -10);
+        }
+        else
+        {
+            nRect.offsetMin = new Vector2(86, -40);
+            nRect.offsetMax = new Vector2(-132, -12);
+        }
 
         TextMeshProUGUI nTM = nameGo.GetComponent<TextMeshProUGUI>();
-        nTM.text = string.IsNullOrWhiteSpace(d.display_name) ? d.label : d.display_name;
-        nTM.fontSize = 17;
+        nTM.text = formattedDisplayName;
+        nTM.fontSize = usesTwoLines ? 16f : 17f;
         nTM.color = C_TEXT_PRIMARY;
         nTM.fontStyle = FontStyles.Bold;
+        nTM.enableWordWrapping = false;
+        nTM.overflowMode = TextOverflowModes.Ellipsis;
+        nTM.alignment = TextAlignmentOptions.MidlineLeft;
+        nTM.lineSpacing = -4f;
 
         var subGo = new GameObject("ItemSub", typeof(RectTransform), typeof(TextMeshProUGUI));
         subGo.transform.SetParent(rect, false);
 
         RectTransform sRect = subGo.GetComponent<RectTransform>();
-        sRect.anchorMin = new Vector2(0, 0);
-        sRect.anchorMax = new Vector2(1, 0);
-        sRect.pivot = new Vector2(0, 0);
-        sRect.anchoredPosition = new Vector2(86, 16);
-        sRect.sizeDelta = new Vector2(-166, 20);
+        sRect.anchorMin = new Vector2(0, 1);
+        sRect.anchorMax = new Vector2(1, 1);
+        sRect.pivot = new Vector2(0, 1);
+
+        if (usesTwoLines)
+        {
+            sRect.offsetMin = new Vector2(86, -84);
+            sRect.offsetMax = new Vector2(-132, -62);
+        }
+        else
+        {
+            sRect.offsetMin = new Vector2(86, -68);
+            sRect.offsetMax = new Vector2(-132, -44);
+        }
 
         TextMeshProUGUI sTM = subGo.GetComponent<TextMeshProUGUI>();
         sTM.text = CountInstances(d.label) + " detected";
         sTM.fontSize = 13;
         sTM.color = C_SUBTEXT;
+        sTM.alignment = TextAlignmentOptions.MidlineLeft;
+        sTM.overflowMode = TextOverflowModes.Ellipsis;
 
         string riskLevel = GetRiskLevel(d.label);
         var (badgeBg, badgeText) = RiskBadgeColors(riskLevel);

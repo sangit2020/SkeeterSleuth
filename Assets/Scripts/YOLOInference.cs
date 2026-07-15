@@ -292,13 +292,17 @@ public class YOLOInference : MonoBehaviour
         return union <= 0 ? 0 : intersection / union;
     }
 
+    // IMPORTANT: This order must exactly match the class metadata embedded in
+    // the ONNX model currently assigned in Unity. The current best.onnx has
+    // 12 classes and does NOT include ss_pot. Keeping ss_pot here would shift
+    // every later label backward by one (trash can -> tire, watering can ->
+    // water hyacinth, etc.).
     static readonly string[] labels = {
         "ss_birdbath",
         "ss_bromiliad",
         "ss_bucket",
         "ss_grill",
         "ss_inflatablepool",
-        "ss_pot",
         "ss_tire",
         "ss_trashcan",
         "ss_treehole",
