@@ -106,3 +106,5 @@ InitTestScene*.unity*
 /[Aa]ssets/[Ss]ceneDependencyCache*
 .DS_Store
 **/.DS_Store
+Assets/Settings/Build Profiles/
+Assets/Settings/Build Profiles.meta
