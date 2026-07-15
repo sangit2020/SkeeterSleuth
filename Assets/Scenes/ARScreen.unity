@@ -2539,6 +2539,51 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &468494950
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 468494952}
+  - component: {fileID: 468494951}
+  m_Layer: 0
+  m_Name: NotificationManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &468494951
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 468494950}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 662a21b0c192247f3b7fb70c5a9b08c4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::NotificationManager
+  weeklyReminderToggle: {fileID: 1806463098}
+--- !u!4 &468494952
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 468494950}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -15.44349, y: -8.03611, z: -14.15323}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &473151939
 GameObject:
   m_ObjectHideFlags: 0
@@ -5368,6 +5413,34 @@ PrefabInstance:
     - target: {fileID: 2611386178778735385, guid: 423fa26c426ca3e41aeb0ef0c81e2ad5, type: 3}
       propertyPath: m_RaycastPadding.z
       value: 5
+      objectReference: {fileID: 0}
+    - target: {fileID: 2742609456318012497, guid: 423fa26c426ca3e41aeb0ef0c81e2ad5, type: 3}
+      propertyPath: onValueChanged.m_PersistentCalls.m_Calls.Array.size
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2742609456318012497, guid: 423fa26c426ca3e41aeb0ef0c81e2ad5, type: 3}
+      propertyPath: onValueChanged.m_PersistentCalls.m_Calls.Array.data[0].m_Mode
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2742609456318012497, guid: 423fa26c426ca3e41aeb0ef0c81e2ad5, type: 3}
+      propertyPath: onValueChanged.m_PersistentCalls.m_Calls.Array.data[0].m_Target
+      value: 
+      objectReference: {fileID: 468494951}
+    - target: {fileID: 2742609456318012497, guid: 423fa26c426ca3e41aeb0ef0c81e2ad5, type: 3}
+      propertyPath: onValueChanged.m_PersistentCalls.m_Calls.Array.data[0].m_CallState
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 2742609456318012497, guid: 423fa26c426ca3e41aeb0ef0c81e2ad5, type: 3}
+      propertyPath: onValueChanged.m_PersistentCalls.m_Calls.Array.data[0].m_MethodName
+      value: OnReminderToggleChanged
+      objectReference: {fileID: 0}
+    - target: {fileID: 2742609456318012497, guid: 423fa26c426ca3e41aeb0ef0c81e2ad5, type: 3}
+      propertyPath: onValueChanged.m_PersistentCalls.m_Calls.Array.data[0].m_TargetAssemblyTypeName
+      value: NotificationManager, Assembly-CSharp
+      objectReference: {fileID: 0}
+    - target: {fileID: 2742609456318012497, guid: 423fa26c426ca3e41aeb0ef0c81e2ad5, type: 3}
+      propertyPath: onValueChanged.m_PersistentCalls.m_Calls.Array.data[0].m_Arguments.m_ObjectArgumentAssemblyTypeName
+      value: UnityEngine.Object, UnityEngine
       objectReference: {fileID: 0}
     - target: {fileID: 5831361679532076718, guid: 423fa26c426ca3e41aeb0ef0c81e2ad5, type: 3}
       propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.size
@@ -8710,6 +8783,17 @@ MonoBehaviour:
   m_ChildScaleWidth: 0
   m_ChildScaleHeight: 0
   m_ReverseArrangement: 0
+--- !u!114 &1806463098 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 2742609456318012497, guid: 423fa26c426ca3e41aeb0ef0c81e2ad5, type: 3}
+  m_PrefabInstance: {fileID: 963557717}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9085046f02f69544eb97fd06b6048fe2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Toggle
 --- !u!1001 &1836542370
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -17609,3 +17693,4 @@ SceneRoots:
   - {fileID: 2038752591}
   - {fileID: 494591952}
   - {fileID: 1952721812}
+  - {fileID: 468494952}

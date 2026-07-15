@@ -157,6 +157,9 @@ public class ScanManager : MonoBehaviour
         if (LastScanCardController.Instance != null)
             LastScanCardController.Instance.RefreshLastScanCard();
 
+        if (NotificationManager.Instance != null)
+            NotificationManager.Instance.OnScanCompleted();
+
         Debug.Log("[ScanManager] Scan stopped. Last saved report ID: " + lastSavedReportId);
 
         if (openReportImmediatelyAfterScan)
