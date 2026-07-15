@@ -23,6 +23,7 @@ public class NotificationManager : MonoBehaviour
     const string PrefKeyReminderEnabled = "WeeklyReminderEnabled";
     const string NotificationIdentifier = "weekly_reminder";
     const int ReminderDays = 7;
+    const int ReminderHourLocal = 10;
 
     void Awake()
     {
@@ -155,21 +156,33 @@ public class NotificationManager : MonoBehaviour
     void ScheduleFromMostRecentScan()
     {
         DateTime baseTimeUtc = DateTime.UtcNow;
+        ScanReport report = null;
 
         if (DatabaseManager.Instance != null)
         {
-            ScanReport report = DatabaseManager.Instance.GetAllReports().FirstOrDefault();
+            report = DatabaseManager.Instance.GetAllReports().FirstOrDefault();
             if (report != null && DateTimeOffset.TryParse(report.scanned_at, out DateTimeOffset dto))
                 baseTimeUtc = dto.UtcDateTime;
         }
 
-        ScheduleReminder(baseTimeUtc.AddDays(ReminderDays));
+        DateTime fireTimeUtc = ComputeFireTimeUtc(baseTimeUtc);
+        ScheduleReminder(fireTimeUtc, report);
 
         PlayerPrefs.SetInt(PrefKeyReminderEnabled, 1);
         PlayerPrefs.Save();
     }
 
-    void ScheduleReminder(DateTime fireTimeUtc)
+    // Keeps the DATE 7 days out from the scan (or now), but clamps the TIME
+    // to a fixed local hour so the reminder doesn't fire at whatever time of
+    // day the original scan happened to occur (e.g. late at night).
+    static DateTime ComputeFireTimeUtc(DateTime baseTimeUtc)
+    {
+        DateTime targetLocalDate = baseTimeUtc.ToLocalTime().Date.AddDays(ReminderDays);
+        DateTime fireLocal = targetLocalDate.AddHours(ReminderHourLocal);
+        return fireLocal.ToUniversalTime();
+    }
+
+    void ScheduleReminder(DateTime fireTimeUtc, ScanReport report)
     {
         CancelReminder();
 
@@ -178,11 +191,13 @@ public class NotificationManager : MonoBehaviour
         if (interval < TimeSpan.FromMinutes(1))
             interval = TimeSpan.FromMinutes(1);
 
+        BuildNotificationContent(report, out string title, out string body);
+
         var notification = new iOSNotification
         {
             Identifier = NotificationIdentifier,
-            Title = "Yard Check-In",
-            Body = "Time to check your yard for mosquito breeding sites.",
+            Title = title,
+            Body = body,
             ShowInForeground = true,
             ForegroundPresentationOption = PresentationOption.Alert | PresentationOption.Sound,
             Trigger = new iOSNotificationTimeIntervalTrigger
@@ -195,6 +210,57 @@ public class NotificationManager : MonoBehaviour
         iOSNotificationCenter.ScheduleNotification(notification);
         Debug.Log("[NotificationManager] Scheduled weekly reminder for " + fireTimeUtc.ToLocalTime());
 #endif
+    }
+
+    // No prior scan (fresh install, reminder scheduled from "now") falls back
+    // to a generic message since there's no real scan data to reference yet.
+    static void BuildNotificationContent(ScanReport report, out string title, out string body)
+    {
+        title = "Weekly Yard Check-In";
+
+        if (report == null || DatabaseManager.Instance == null)
+        {
+            body = "Time to check your yard for mosquito breeding sites.";
+            return;
+        }
+
+        int count = report.total_objects_detected;
+
+        if (count <= 0)
+        {
+            body = "Your last scan didn't find any breeding sites " + ReminderDays + " days ago — a quick recheck never hurts.";
+            return;
+        }
+
+        string risk = ComputeOverallRisk(report.id);
+        string itemPhrase = count == 1 ? "item" : "items";
+
+        body = "Your last scan found " + count + " " + risk + " Risk " + itemPhrase + " " + ReminderDays + " days ago — check your yard again.";
+    }
+
+    // Mirrors LastScanCardController.ComputeOverallRisk: reuse
+    // ReportUIBuilder's per-label risk lookup and take the highest risk
+    // across every detection in the report.
+    static string ComputeOverallRisk(int reportId)
+    {
+        var detections = DatabaseManager.Instance.GetDetectionsForReport(reportId);
+
+        if (detections == null || detections.Count == 0)
+            return "Low";
+
+        bool anyHigh = false;
+        bool anyMod = false;
+
+        foreach (var d in detections)
+        {
+            string r = ReportUIBuilder.GetRiskLevelPublic(d.label);
+            if (r == "High") anyHigh = true;
+            else if (r == "Moderate") anyMod = true;
+        }
+
+        if (anyHigh) return "High";
+        if (anyMod) return "Moderate";
+        return "Low";
     }
 
     public void CancelReminder()
