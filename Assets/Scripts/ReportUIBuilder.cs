@@ -15,6 +15,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -75,6 +76,11 @@ public class ReportUIBuilder : MonoBehaviour
     Image _detailObjectIconImage;
     GameObject _detailObjectIconImageObject;
     TextMeshProUGUI _detailObjectIconFallback;
+
+    // Loaded only for the Item Detail page. The Full Report list continues to
+    // use the existing Resources/Icons sprites in CreateDetectedItemCard().
+    Texture2D _detailDetectionPhotoTexture;
+    Sprite _detailDetectionPhotoSprite;
 
     List<DetectionWithDetails> _currentDetections = new();
     ScanReport _currentReport;
@@ -350,18 +356,41 @@ public class ReportUIBuilder : MonoBehaviour
         _detailRiskBadgeText.color = riskText;
 
 
-        if (_detailObjectIconImageObject != null && _detailObjectIconImage != null && _detailObjectIconFallback != null)
+        if (_detailObjectIconImageObject != null &&
+            _detailObjectIconImage != null &&
+            _detailObjectIconFallback != null)
         {
-            Sprite objectSprite = LoadObjectIcon(d.label);
+            // Release the photo from the previously viewed item before loading
+            // the next one. This prevents a native texture/sprite memory leak.
+            ReleaseCurrentDetailDetectionPhoto();
 
-            if (objectSprite != null)
+            Sprite detailSprite = null;
+
+            // Detection photos are used ONLY on the Item Detail page.
+            // The Full Report cards remain unchanged and continue using
+            // LoadObjectIcon(d.label) inside CreateDetectedItemCard().
+            if (!string.IsNullOrWhiteSpace(d.screenshot_path))
             {
-                _detailObjectIconImage.sprite = objectSprite;
+                detailSprite = LoadDetectionPhotoForDetail(d.screenshot_path);
+            }
+
+            // Old reports, missing files, or failed image loads use the original
+            // object icon as a safe fallback.
+            if (detailSprite == null)
+            {
+                detailSprite = LoadObjectIcon(d.label);
+            }
+
+            if (detailSprite != null)
+            {
+                _detailObjectIconImage.sprite = detailSprite;
+                _detailObjectIconImage.preserveAspect = true;
                 _detailObjectIconImageObject.SetActive(true);
                 _detailObjectIconFallback.gameObject.SetActive(false);
             }
             else
             {
+                _detailObjectIconImage.sprite = null;
                 _detailObjectIconImageObject.SetActive(false);
                 _detailObjectIconFallback.text = GetIconFallbackText(d.label);
                 _detailObjectIconFallback.gameObject.SetActive(true);
@@ -369,6 +398,98 @@ public class ReportUIBuilder : MonoBehaviour
         }
     }
 
+
+
+    /// <summary>
+    /// Loads a saved detection JPG for the Item Detail page.
+    /// Returns null when the path is missing, invalid, or cannot be decoded.
+    /// </summary>
+    Sprite LoadDetectionPhotoForDetail(string screenshotPath)
+    {
+        if (string.IsNullOrWhiteSpace(screenshotPath) ||
+            !File.Exists(screenshotPath))
+        {
+            return null;
+        }
+
+        try
+        {
+            byte[] imageBytes = File.ReadAllBytes(screenshotPath);
+
+            if (imageBytes == null || imageBytes.Length == 0)
+            {
+                return null;
+            }
+
+            Texture2D loadedTexture = new Texture2D(
+                2,
+                2,
+                TextureFormat.RGB24,
+                false
+            );
+
+            if (!loadedTexture.LoadImage(imageBytes, false))
+            {
+                Destroy(loadedTexture);
+                return null;
+            }
+
+            loadedTexture.name = "ItemDetailDetectionPhotoTexture";
+
+            Sprite loadedSprite = Sprite.Create(
+                loadedTexture,
+                new Rect(0f, 0f, loadedTexture.width, loadedTexture.height),
+                new Vector2(0.5f, 0.5f),
+                100f
+            );
+
+            loadedSprite.name = "ItemDetailDetectionPhotoSprite";
+
+            _detailDetectionPhotoTexture = loadedTexture;
+            _detailDetectionPhotoSprite = loadedSprite;
+
+            return loadedSprite;
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning(
+                "[ReportUIBuilder] Could not load detection photo at " +
+                screenshotPath + ": " + e.Message
+            );
+
+            ReleaseCurrentDetailDetectionPhoto();
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Destroys the runtime texture and sprite created for the current
+    /// Item Detail photo. Resources-loaded Full Report icons are not touched.
+    /// </summary>
+    void ReleaseCurrentDetailDetectionPhoto()
+    {
+        if (_detailDetectionPhotoSprite != null)
+        {
+            Destroy(_detailDetectionPhotoSprite);
+            _detailDetectionPhotoSprite = null;
+        }
+
+        if (_detailDetectionPhotoTexture != null)
+        {
+            Destroy(_detailDetectionPhotoTexture);
+            _detailDetectionPhotoTexture = null;
+        }
+    }
+
+    void OnDestroy()
+    {
+        ReleaseCurrentDetailDetectionPhoto();
+
+        if (Instance == this)
+        {
+            Instance = null;
+        }
+    }
 
     // Full-width fixed header used by report screens.
     // Built outside the ScrollRect so the green header reaches the screen edges

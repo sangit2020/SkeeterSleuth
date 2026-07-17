@@ -30,6 +30,13 @@ public class YOLOInference : MonoBehaviour
     [Min(0f)]
     public float inferenceIntervalSeconds = 0.12f;
 
+    [Header("Saved Detection Crops")]
+    [Tooltip("The model input uses top-left image coordinates, while Unity textures use a bottom-left origin. Leave this enabled unless saved photos appear upside down.")]
+    public bool flipSavedCropsVertically = true;
+
+    [Tooltip("Enable only if saved photos appear mirrored on the target device.")]
+    public bool flipSavedCropsHorizontally = false;
+
     public List<DetectionResult> currentDetections = new List<DetectionResult>();
 
     // Incremented once for each completed inference result. Consumers use this
@@ -37,6 +44,12 @@ public class YOLOInference : MonoBehaviour
     public int DetectionFrameId { get; private set; }
 
     private float nextInferenceTime;
+
+    // Stores the exact 640x640 RGB frame that was passed to YOLO after orientation
+    // correction. Cropping from this frame guarantees that the normalized YOLO
+    // bounding box lines up with the saved image.
+    private byte[] latestOrientedRgb24;
+    private bool hasLatestInferenceFrame;
 
     // Raw sensor dimensions of the most recently processed camera frame (e.g.
     // 1920x1440, landscape sensor mount), before the 90-degree rotation below.
@@ -48,6 +61,9 @@ public class YOLOInference : MonoBehaviour
 
     void Start()
     {
+        if (scanManager == null)
+            scanManager = UnityEngine.Object.FindFirstObjectByType<ScanManager>();
+
         runtimeModel = Unity.InferenceEngine.ModelLoader.Load(modelAsset);
         worker = new Unity.InferenceEngine.Worker(runtimeModel, Unity.InferenceEngine.BackendType.CPU);
 #if UNITY_EDITOR
@@ -106,19 +122,23 @@ public class YOLOInference : MonoBehaviour
 
             cpuImage.Convert(conversionParams, rawBytes);
 
+            if (latestOrientedRgb24 == null ||
+                latestOrientedRgb24.Length != INPUT_SIZE * INPUT_SIZE * 3)
+            {
+                latestOrientedRgb24 = new byte[INPUT_SIZE * INPUT_SIZE * 3];
+            }
+
             // cpuImage is the raw camera sensor buffer (e.g. 1920x1440, landscape),
             // squashed above to a 640x640 square with no orientation correction. The
             // sensor is mounted landscape on iOS regardless of how the phone is held,
             // so when the user holds the phone portrait (the normal case for this app),
             // the image YOLO receives is still rotated 90 degrees relative to what's on
-            // screen - the model sees distorted/sideways objects, which explains zero
-            // detections. Rotate 90 degrees clockwise here so the image matches the
-            // portrait orientation the user sees. Rotating the already-squashed square
-            // (instead of the full-resolution source) gives the same result for far
-            // less work, since resizing into equal width/height commutes with rotation.
-            // If detections come back rotated/mirrored the wrong way on device, swap
-            // this to counter-clockwise: srcRow = destCol; srcCol = INPUT_SIZE - 1 - destRow;
+            // screen. Rotate 90 degrees clockwise so the model input matches portrait.
+            //
+            // The same oriented RGB bytes are kept for photo cropping. Because both
+            // detection and cropping use this exact frame, bbox coordinates stay aligned.
             var floatData = new float[1 * 3 * INPUT_SIZE * INPUT_SIZE];
+
             for (int destRow = 0; destRow < INPUT_SIZE; destRow++)
             {
                 for (int destCol = 0; destCol < INPUT_SIZE; destCol++)
@@ -126,14 +146,24 @@ public class YOLOInference : MonoBehaviour
                     int srcRow = INPUT_SIZE - 1 - destCol;
                     int srcCol = destRow;
                     int srcIdx = (srcRow * INPUT_SIZE + srcCol) * 3;
-                    int destIdx = destRow * INPUT_SIZE + destCol;
+                    int destPixelIdx = destRow * INPUT_SIZE + destCol;
+                    int destRgbIdx = destPixelIdx * 3;
 
-                    floatData[destIdx] = rawBytes[srcIdx] / 255f;
-                    floatData[INPUT_SIZE * INPUT_SIZE + destIdx] = rawBytes[srcIdx + 1] / 255f;
-                    floatData[2 * INPUT_SIZE * INPUT_SIZE + destIdx] = rawBytes[srcIdx + 2] / 255f;
+                    byte r = rawBytes[srcIdx];
+                    byte g = rawBytes[srcIdx + 1];
+                    byte b = rawBytes[srcIdx + 2];
+
+                    latestOrientedRgb24[destRgbIdx] = r;
+                    latestOrientedRgb24[destRgbIdx + 1] = g;
+                    latestOrientedRgb24[destRgbIdx + 2] = b;
+
+                    floatData[destPixelIdx] = r / 255f;
+                    floatData[INPUT_SIZE * INPUT_SIZE + destPixelIdx] = g / 255f;
+                    floatData[2 * INPUT_SIZE * INPUT_SIZE + destPixelIdx] = b / 255f;
                 }
             }
 
+            hasLatestInferenceFrame = true;
             rawBytes.Dispose();
 
             using var inputTensor = new Unity.InferenceEngine.Tensor<float>(
@@ -143,17 +173,19 @@ public class YOLOInference : MonoBehaviour
 
             using var outputTensor = worker.PeekOutput("output0") as Unity.InferenceEngine.Tensor<float>;
 
+            if (outputTensor == null)
+            {
+                Debug.LogError("[YOLOInference] Could not read model output named output0.");
+                return;
+            }
+
             // Derive the output layout from the model itself instead of hardcoding
-            // 8400 anchors / 13 classes. A swapped-in ONNX file (different class
-            // count, different input resolution, different anchor count) changes
-            // this shape, and hardcoded constants would index outputData out of
-            // bounds - which is exactly what an IndexOutOfRangeException here means.
+            // 8400 anchors / a fixed class count.
             var outputShape = outputTensor.shape;
             if (outputShape.rank != 3 || outputShape[0] != 1)
             {
                 Debug.LogError($"[YOLOInference] Unexpected output tensor shape {outputShape} (rank={outputShape.rank}). " +
-                                "Expected rank 3, batch 1, e.g. (1, 4+numClasses, numDetections). Skipping this frame - " +
-                                "check that the ONNX model's output layout matches what ParseDetections assumes.");
+                               "Expected rank 3, batch 1, e.g. (1, 4+numClasses, numDetections). Skipping this frame.");
                 return;
             }
 
@@ -163,24 +195,21 @@ public class YOLOInference : MonoBehaviour
 
             if (numClasses != GetLabelCount())
             {
-                Debug.LogWarning($"[YOLOInference] Model reports {numClasses} classes but the GetLabel() list has " +
-                                  $"{GetLabelCount()} entries - labels will be wrong/\"unknown\" for out-of-range class IDs. " +
-                                  "Update the labels array in GetLabel() to match this model.");
+                Debug.LogWarning($"[YOLOInference] Model reports {numClasses} classes but the labels list has " +
+                                 $"{GetLabelCount()} entries. Update the labels array to match the ONNX model.");
             }
 
             var outputData = outputTensor.DownloadToArray();
 
-            // Unconditional - fires every frame regardless of whether anything below
-            // clears CONFIDENCE_THRESHOLD. Lets us tell "the model ran and scored
-            // everything low" apart from "this frame never reached inference at all",
-            // which the old code (which only logged when count > 0) couldn't show.
             float maxRawConfidence = 0f;
             int maxRawClassId = -1;
+
             for (int i = 0; i < numDetections; i++)
             {
                 for (int c = 4; c < stride; c++)
                 {
                     float score = outputData[c * numDetections + i];
+
                     if (score > maxRawConfidence)
                     {
                         maxRawConfidence = score;
@@ -188,6 +217,7 @@ public class YOLOInference : MonoBehaviour
                     }
                 }
             }
+
 #if UNITY_EDITOR
             Debug.Log($"[YOLOInference] RunInference ran: cpuImage={cpuImage.width}x{cpuImage.height} " +
                       $"outputShape={outputShape} numDetections={numDetections} numClasses={numClasses} " +
@@ -199,14 +229,163 @@ public class YOLOInference : MonoBehaviour
             currentDetections = ApplyNMS(rawDetections);
             DetectionFrameId++;
 
-            // IMPORTANT: raw detections are not saved here. ARPinManager confirms
-            // confidence, spatial consistency, consecutive inference frames, and
-            // camera stability before registering anything with ScanManager.
+            // ScanManager only uses this callback for photo candidate selection.
+            // It does not register raw detections in the report. ARPinManager still
+            // decides which detections are actually confirmed.
+            if (scanManager == null)
+                scanManager = ScanManager.Instance;
+
+            if (scanManager != null)
+            {
+                scanManager.OnInferenceFrameCompletedForPhotoSelection(
+                    DetectionFrameId,
+                    currentDetections
+                );
+            }
 
 #if UNITY_EDITOR
             if (currentDetections.Count > 0)
                 Debug.Log($"Detections this frame: {currentDetections.Count}");
 #endif
+        }
+    }
+
+    /// <summary>
+    /// Crops the latest oriented 640x640 YOLO input around a normalized detection
+    /// bounding box, adds padding, and returns a JPG. Because this uses the exact
+    /// frame that YOLO saw, no separate camera-to-model coordinate conversion is needed.
+    /// </summary>
+    public bool TryCreatePaddedCropJpg(
+        DetectionResult detection,
+        float paddingPercent,
+        int jpegQuality,
+        out byte[] jpgBytes
+    )
+    {
+        jpgBytes = null;
+
+        if (!hasLatestInferenceFrame ||
+            latestOrientedRgb24 == null ||
+            latestOrientedRgb24.Length != INPUT_SIZE * INPUT_SIZE * 3)
+        {
+            Debug.LogWarning("[YOLOInference] Cannot create crop because no inference frame is available yet.");
+            return false;
+        }
+
+        if (detection == null || detection.bbox_w <= 0f || detection.bbox_h <= 0f)
+        {
+            Debug.LogWarning("[YOLOInference] Cannot create crop because the detection bbox is invalid.");
+            return false;
+        }
+
+        float padding = Mathf.Clamp(paddingPercent, 0f, 0.5f);
+
+        float xMinNormalized = Mathf.Clamp01(detection.bbox_x - detection.bbox_w * padding);
+        float yMinNormalized = Mathf.Clamp01(detection.bbox_y - detection.bbox_h * padding);
+        float xMaxNormalized = Mathf.Clamp01(detection.bbox_x + detection.bbox_w * (1f + padding));
+        float yMaxNormalized = Mathf.Clamp01(detection.bbox_y + detection.bbox_h * (1f + padding));
+
+        int xMin = Mathf.Clamp(
+            Mathf.FloorToInt(xMinNormalized * INPUT_SIZE),
+            0,
+            INPUT_SIZE - 1
+        );
+
+        int yMin = Mathf.Clamp(
+            Mathf.FloorToInt(yMinNormalized * INPUT_SIZE),
+            0,
+            INPUT_SIZE - 1
+        );
+
+        int xMax = Mathf.Clamp(
+            Mathf.CeilToInt(xMaxNormalized * INPUT_SIZE),
+            xMin + 1,
+            INPUT_SIZE
+        );
+
+        int yMax = Mathf.Clamp(
+            Mathf.CeilToInt(yMaxNormalized * INPUT_SIZE),
+            yMin + 1,
+            INPUT_SIZE
+        );
+
+        int cropWidth = xMax - xMin;
+        int cropHeight = yMax - yMin;
+
+        if (cropWidth < 2 || cropHeight < 2)
+        {
+            Debug.LogWarning("[YOLOInference] Calculated crop was too small.");
+            return false;
+        }
+
+        byte[] croppedRgb24 = new byte[cropWidth * cropHeight * 3];
+
+        for (int sourceRowOffset = 0; sourceRowOffset < cropHeight; sourceRowOffset++)
+        {
+            int sourceRow = yMin + sourceRowOffset;
+            int destinationRow = flipSavedCropsVertically
+                ? cropHeight - 1 - sourceRowOffset
+                : sourceRowOffset;
+
+            if (!flipSavedCropsHorizontally)
+            {
+                int sourceByteIndex = (sourceRow * INPUT_SIZE + xMin) * 3;
+                int destinationByteIndex = destinationRow * cropWidth * 3;
+
+                System.Buffer.BlockCopy(
+                    latestOrientedRgb24,
+                    sourceByteIndex,
+                    croppedRgb24,
+                    destinationByteIndex,
+                    cropWidth * 3
+                );
+            }
+            else
+            {
+                for (int sourceColumnOffset = 0; sourceColumnOffset < cropWidth; sourceColumnOffset++)
+                {
+                    int sourceColumn = xMin + sourceColumnOffset;
+                    int destinationColumn = cropWidth - 1 - sourceColumnOffset;
+
+                    int sourceByteIndex = (sourceRow * INPUT_SIZE + sourceColumn) * 3;
+                    int destinationByteIndex =
+                        (destinationRow * cropWidth + destinationColumn) * 3;
+
+                    croppedRgb24[destinationByteIndex] = latestOrientedRgb24[sourceByteIndex];
+                    croppedRgb24[destinationByteIndex + 1] = latestOrientedRgb24[sourceByteIndex + 1];
+                    croppedRgb24[destinationByteIndex + 2] = latestOrientedRgb24[sourceByteIndex + 2];
+                }
+            }
+        }
+
+        Texture2D cropTexture = null;
+
+        try
+        {
+            cropTexture = new Texture2D(
+                cropWidth,
+                cropHeight,
+                TextureFormat.RGB24,
+                false
+            );
+
+            cropTexture.LoadRawTextureData(croppedRgb24);
+            cropTexture.Apply(false, false);
+
+            jpgBytes = cropTexture.EncodeToJPG(Mathf.Clamp(jpegQuality, 1, 100));
+
+            return jpgBytes != null && jpgBytes.Length > 0;
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError("[YOLOInference] Failed to encode detection crop: " + e.Message);
+            jpgBytes = null;
+            return false;
+        }
+        finally
+        {
+            if (cropTexture != null)
+                Destroy(cropTexture);
         }
     }
 
@@ -222,6 +401,7 @@ public class YOLOInference : MonoBehaviour
             for (int c = 4; c < stride; c++)
             {
                 float score = output[c * numDetections + i];
+
                 if (score > confidence)
                 {
                     confidence = score;
@@ -233,8 +413,8 @@ public class YOLOInference : MonoBehaviour
 
             float cx = output[0 * numDetections + i];
             float cy = output[1 * numDetections + i];
-            float w  = output[2 * numDetections + i];
-            float h  = output[3 * numDetections + i];
+            float w = output[2 * numDetections + i];
+            float h = output[3 * numDetections + i];
 
             results.Add(new DetectionResult
             {
@@ -281,23 +461,22 @@ public class YOLOInference : MonoBehaviour
         float ix2 = Mathf.Min(ax2, bx2);
         float iy2 = Mathf.Min(ay2, by2);
 
-        float interW = Mathf.Max(0, ix2 - ix1);
-        float interH = Mathf.Max(0, iy2 - iy1);
+        float interW = Mathf.Max(0f, ix2 - ix1);
+        float interH = Mathf.Max(0f, iy2 - iy1);
         float intersection = interW * interH;
 
         float aArea = a.bbox_w * a.bbox_h;
         float bArea = b.bbox_w * b.bbox_h;
         float union = aArea + bArea - intersection;
 
-        return union <= 0 ? 0 : intersection / union;
+        return union <= 0f ? 0f : intersection / union;
     }
 
     // IMPORTANT: This order must exactly match the class metadata embedded in
     // the ONNX model currently assigned in Unity. The current best.onnx has
-    // 12 classes and does NOT include ss_pot. Keeping ss_pot here would shift
-    // every later label backward by one (trash can -> tire, watering can ->
-    // water hyacinth, etc.).
-    static readonly string[] labels = {
+    // 12 classes and does NOT include ss_pot.
+    static readonly string[] labels =
+    {
         "ss_birdbath",
         "ss_bromiliad",
         "ss_bucket",
@@ -320,7 +499,10 @@ public class YOLOInference : MonoBehaviour
         return "unknown";
     }
 
-    int GetLabelCount() => labels.Length;
+    int GetLabelCount()
+    {
+        return labels.Length;
+    }
 
     void OnDestroy()
     {

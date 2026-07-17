@@ -27,17 +27,56 @@ public class ScanManager : MonoBehaviour
     [Tooltip("If true, the full report opens immediately after stopping the scan.")]
     public bool openReportImmediatelyAfterScan = false;
 
+    [Header("Detection Photo Capture")]
+    [Tooltip("Save a padded JPG crop for each confirmed object label.")]
+    public bool captureDetectionPhotos = true;
+
+    [Tooltip("How many inference frames are compared, including the frame that confirmed the detection. Three means current frame plus the next two.")]
+    [Range(1, 8)]
+    public int cropCandidateFrameWindow = 3;
+
+    [Tooltip("Padding added around every side of the YOLO bounding box.")]
+    [Range(0f, 0.5f)]
+    public float cropPaddingPercent = 0.20f;
+
+    [Tooltip("Minimum IoU used to follow the same object across the short candidate window.")]
+    [Range(0f, 1f)]
+    public float cropMatchIouThreshold = 0.15f;
+
+    [Tooltip("Saved JPG quality. 85 is a good balance for a report thumbnail.")]
+    [Range(1, 100)]
+    public int cropJpegQuality = 85;
+
     private bool isScanning = false;
     private float scanStartTime;
-
     private int lastSavedReportId = -1;
 
-    // Stores the max number of each label seen in one scan frame.
-    // This avoids counting the same object hundreds of times across camera frames.
-    private Dictionary<string, int> detectedCounts = new Dictionary<string, int>();
+    // Stores the max number of each label seen in one confirmed registration call.
+    // The current ARPinManager permits one active pin per label, so the photo state
+    // is also tracked once per label.
+    private Dictionary<string, int> detectedCounts =
+        new Dictionary<string, int>();
 
-    // Stores the best example detection for each label so we have bbox data to save.
-    private Dictionary<string, DetectionResult> bestDetectionByLabel = new Dictionary<string, DetectionResult>();
+    // Stores the best example detection for each label so bbox data can be saved.
+    private Dictionary<string, DetectionResult> bestDetectionByLabel =
+        new Dictionary<string, DetectionResult>();
+
+    // Tracks the confirmed frame plus a few following inference frames and keeps
+    // the highest-confidence crop. JPG bytes stay in memory only until Stop Scan.
+    private Dictionary<string, CropSelectionState> cropSelectionByLabel =
+        new Dictionary<string, CropSelectionState>();
+
+    private sealed class CropSelectionState
+    {
+        public string label;
+        public DetectionResult trackingDetection;
+        public DetectionResult bestDetection;
+        public float bestConfidence = -1f;
+        public byte[] bestJpegBytes;
+        public int framesRemaining;
+        public int lastProcessedFrameId = -1;
+        public bool finalized;
+    }
 
     private Dictionary<string, string> displayNameMap = new Dictionary<string, string>()
     {
@@ -80,10 +119,7 @@ public class ScanManager : MonoBehaviour
 
     void Start()
     {
-        if (yoloInference == null)
-        {
-            yoloInference = UnityEngine.Object.FindFirstObjectByType<YOLOInference>();
-        }
+        EnsureYoloReference();
 
         if (scanCompletePanel != null)
             scanCompletePanel.SetActive(false);
@@ -103,6 +139,7 @@ public class ScanManager : MonoBehaviour
 
         detectedCounts.Clear();
         bestDetectionByLabel.Clear();
+        cropSelectionByLabel.Clear();
 
         if (beginScanButton != null)
             beginScanButton.SetActive(false);
@@ -132,9 +169,9 @@ public class ScanManager : MonoBehaviour
 
         // Do not pull the latest raw YOLO frame here. Only detections confirmed
         // by ARPinManager are allowed into the report/database pipeline.
-
         int duration = Mathf.RoundToInt(Time.time - scanStartTime);
 
+        // Stop accepting future inference-frame photo candidates before saving.
         isScanning = false;
 
         if (scanningIndicator != null)
@@ -147,6 +184,7 @@ public class ScanManager : MonoBehaviour
             scanStatusChip.SetActive(false);
 
         ARPinManager pinManager = UnityEngine.Object.FindAnyObjectByType<ARPinManager>();
+
         if (pinManager != null)
             pinManager.ClearAllPins();
 
@@ -163,31 +201,13 @@ public class ScanManager : MonoBehaviour
         Debug.Log("[ScanManager] Scan stopped. Last saved report ID: " + lastSavedReportId);
 
         if (openReportImmediatelyAfterScan)
-        {
             OpenGeneratedReport();
-        }
     }
 
-    private void PullLatestYoloDetectionsOnce()
+    private void EnsureYoloReference()
     {
         if (yoloInference == null)
-        {
             yoloInference = UnityEngine.Object.FindFirstObjectByType<YOLOInference>();
-        }
-
-        if (yoloInference == null)
-        {
-            Debug.LogWarning("[ScanManager] No YOLOInference found. No YOLO detections were pulled.");
-            return;
-        }
-
-        if (yoloInference.currentDetections == null)
-        {
-            Debug.LogWarning("[ScanManager] YOLO currentDetections list is null.");
-            return;
-        }
-
-        RegisterDetections(yoloInference.currentDetections);
     }
 
     public void RegisterDetections(List<DetectionResult> detections)
@@ -203,34 +223,41 @@ public class ScanManager : MonoBehaviour
 
             string normalizedLabel = NormalizeLabel(detection.label);
 
-            if (string.IsNullOrWhiteSpace(normalizedLabel) || normalizedLabel == "unknown")
+            if (string.IsNullOrWhiteSpace(normalizedLabel) ||
+                normalizedLabel == "unknown")
+            {
                 continue;
+            }
 
             if (frameCounts.ContainsKey(normalizedLabel))
                 frameCounts[normalizedLabel]++;
             else
                 frameCounts[normalizedLabel] = 1;
 
-            if (!bestDetectionByLabel.ContainsKey(normalizedLabel))
+            DetectionResult normalizedDetection = CloneDetection(
+                detection,
+                normalizedLabel
+            );
+
+            if (!bestDetectionByLabel.ContainsKey(normalizedLabel) ||
+                normalizedDetection.confidence >
+                bestDetectionByLabel[normalizedLabel].confidence)
             {
-                bestDetectionByLabel[normalizedLabel] = detection;
+                bestDetectionByLabel[normalizedLabel] = normalizedDetection;
             }
-            else if (detection.confidence > bestDetectionByLabel[normalizedLabel].confidence)
-            {
-                bestDetectionByLabel[normalizedLabel] = detection;
-            }
+
+            StartPhotoSelectionIfNeeded(
+                normalizedLabel,
+                normalizedDetection
+            );
         }
 
         foreach (KeyValuePair<string, int> kvp in frameCounts)
         {
             if (!detectedCounts.ContainsKey(kvp.Key))
-            {
                 detectedCounts[kvp.Key] = kvp.Value;
-            }
             else
-            {
                 detectedCounts[kvp.Key] = Mathf.Max(detectedCounts[kvp.Key], kvp.Value);
-            }
         }
     }
 
@@ -238,22 +265,35 @@ public class ScanManager : MonoBehaviour
     {
         if (detection == null) return;
 
-        List<DetectionResult> singleDetectionList = new List<DetectionResult>();
-        singleDetectionList.Add(detection);
-
-        RegisterDetections(singleDetectionList);
+        RegisterDetections(new List<DetectionResult> { detection });
     }
 
-    // Backward-compatible method in case another script is already calling RegisterDetection(label).
+    // ARPinManager currently calls this string overload after it confirms and
+    // places a pin. Resolve that label back to the best matching detection in the
+    // latest YOLO frame so the photo pipeline still receives a real bbox.
     public void RegisterDetection(string label)
     {
         if (!isScanning) return;
 
         string normalizedLabel = NormalizeLabel(label);
 
-        if (string.IsNullOrWhiteSpace(normalizedLabel) || normalizedLabel == "unknown")
+        if (string.IsNullOrWhiteSpace(normalizedLabel) ||
+            normalizedLabel == "unknown")
+        {
             return;
+        }
 
+        DetectionResult currentDetection =
+            FindBestCurrentYoloDetection(normalizedLabel);
+
+        if (currentDetection != null)
+        {
+            RegisterDetection(currentDetection);
+            return;
+        }
+
+        // Fallback preserves the original behavior if a legacy caller registers
+        // only a label at a moment when the matching YOLO frame is unavailable.
         if (!detectedCounts.ContainsKey(normalizedLabel))
             detectedCounts[normalizedLabel] = 1;
 
@@ -269,13 +309,207 @@ public class ScanManager : MonoBehaviour
                 confidence = 0f
             };
         }
+
+        Debug.LogWarning(
+            "[ScanManager] Registered " + normalizedLabel +
+            " without bbox/photo data because no matching current YOLO detection was found."
+        );
     }
 
-    // Used by the Fix Sheet to show "X found this scan" for one specific label.
-    public int GetCountForLabel(string label)
+    /// <summary>
+    /// Called once after each completed YOLO inference. This does not register raw
+    /// detections. It only evaluates additional photo candidates for labels that
+    /// ARPinManager has already confirmed.
+    /// </summary>
+    public void OnInferenceFrameCompletedForPhotoSelection(
+        int frameId,
+        List<DetectionResult> frameDetections
+    )
     {
-        string normalizedLabel = NormalizeLabel(label);
-        return detectedCounts.ContainsKey(normalizedLabel) ? detectedCounts[normalizedLabel] : 1;
+        if (!isScanning || !captureDetectionPhotos) return;
+        if (cropSelectionByLabel.Count == 0) return;
+
+        EnsureYoloReference();
+
+        if (yoloInference == null) return;
+
+        foreach (CropSelectionState state in cropSelectionByLabel.Values)
+        {
+            if (state == null || state.finalized) continue;
+            if (frameId <= state.lastProcessedFrameId) continue;
+
+            DetectionResult matchingDetection = FindBestTrackingMatch(
+                state,
+                frameDetections
+            );
+
+            if (matchingDetection != null)
+            {
+                // Follow the most recent box even when this frame does not beat
+                // the current confidence. This keeps short-term matching stable.
+                state.trackingDetection = CloneDetection(
+                    matchingDetection,
+                    state.label
+                );
+
+                TryStoreCandidateCrop(state, matchingDetection);
+            }
+
+            state.lastProcessedFrameId = frameId;
+            state.framesRemaining--;
+
+            if (state.framesRemaining <= 0)
+            {
+                state.finalized = true;
+
+#if UNITY_EDITOR
+                Debug.Log(
+                    "[ScanManager] Finalized crop for " + state.label +
+                    " at confidence " + state.bestConfidence.ToString("F3") + "."
+                );
+#endif
+            }
+        }
+    }
+
+    private void StartPhotoSelectionIfNeeded(
+        string normalizedLabel,
+        DetectionResult confirmedDetection
+    )
+    {
+        if (!captureDetectionPhotos) return;
+        if (confirmedDetection == null) return;
+        if (confirmedDetection.bbox_w <= 0f || confirmedDetection.bbox_h <= 0f) return;
+        if (cropSelectionByLabel.ContainsKey(normalizedLabel)) return;
+
+        EnsureYoloReference();
+
+        if (yoloInference == null)
+        {
+            Debug.LogWarning(
+                "[ScanManager] Cannot start photo selection because YOLOInference is missing."
+            );
+            return;
+        }
+
+        CropSelectionState state = new CropSelectionState
+        {
+            label = normalizedLabel,
+            trackingDetection = CloneDetection(
+                confirmedDetection,
+                normalizedLabel
+            ),
+            framesRemaining = Mathf.Max(1, cropCandidateFrameWindow),
+            lastProcessedFrameId = yoloInference.DetectionFrameId
+        };
+
+        cropSelectionByLabel[normalizedLabel] = state;
+
+        // Candidate 1: the frame that caused ARPinManager to confirm the object.
+        TryStoreCandidateCrop(state, confirmedDetection);
+        state.framesRemaining--;
+
+        if (state.framesRemaining <= 0)
+            state.finalized = true;
+    }
+
+    private void TryStoreCandidateCrop(
+        CropSelectionState state,
+        DetectionResult candidate
+    )
+    {
+        if (state == null || candidate == null) return;
+        if (candidate.confidence <= state.bestConfidence) return;
+
+        EnsureYoloReference();
+
+        if (yoloInference == null) return;
+
+        if (yoloInference.TryCreatePaddedCropJpg(
+                candidate,
+                cropPaddingPercent,
+                cropJpegQuality,
+                out byte[] jpgBytes))
+        {
+            state.bestConfidence = candidate.confidence;
+            state.bestJpegBytes = jpgBytes;
+            state.bestDetection = CloneDetection(candidate, state.label);
+
+            if (!bestDetectionByLabel.ContainsKey(state.label) ||
+                candidate.confidence >
+                bestDetectionByLabel[state.label].confidence)
+            {
+                bestDetectionByLabel[state.label] =
+                    CloneDetection(candidate, state.label);
+            }
+        }
+    }
+
+    private DetectionResult FindBestCurrentYoloDetection(
+        string normalizedLabel
+    )
+    {
+        EnsureYoloReference();
+
+        if (yoloInference == null ||
+            yoloInference.currentDetections == null)
+        {
+            return null;
+        }
+
+        DetectionResult best = null;
+
+        foreach (DetectionResult detection in yoloInference.currentDetections)
+        {
+            if (detection == null) continue;
+
+            if (NormalizeLabel(detection.label) != normalizedLabel)
+                continue;
+
+            if (best == null || detection.confidence > best.confidence)
+                best = detection;
+        }
+
+        return best == null
+            ? null
+            : CloneDetection(best, normalizedLabel);
+    }
+
+    private DetectionResult FindBestTrackingMatch(
+        CropSelectionState state,
+        List<DetectionResult> detections
+    )
+    {
+        if (state == null ||
+            detections == null ||
+            detections.Count == 0)
+        {
+            return null;
+        }
+
+        DetectionResult bestMatch = null;
+        float bestMatchConfidence = -1f;
+
+        foreach (DetectionResult detection in detections)
+        {
+            if (detection == null) continue;
+
+            if (NormalizeLabel(detection.label) != state.label)
+                continue;
+
+            float iou = IoU(state.trackingDetection, detection);
+
+            if (iou < cropMatchIouThreshold)
+                continue;
+
+            if (detection.confidence > bestMatchConfidence)
+            {
+                bestMatch = detection;
+                bestMatchConfidence = detection.confidence;
+            }
+        }
+
+        return bestMatch;
     }
 
     private int SaveCurrentScanToDatabase(int durationSeconds)
@@ -302,63 +536,72 @@ public class ScanManager : MonoBehaviour
             DetectionResult bestDetection = null;
 
             if (bestDetectionByLabel.ContainsKey(label))
-            {
                 bestDetection = bestDetectionByLabel[label];
+
+            string screenshotPath = "";
+
+            if (captureDetectionPhotos &&
+                cropSelectionByLabel.TryGetValue(
+                    label,
+                    out CropSelectionState photoState))
+            {
+                if (photoState.bestDetection != null)
+                    bestDetection = photoState.bestDetection;
+
+                if (photoState.bestJpegBytes != null &&
+                    photoState.bestJpegBytes.Length > 0)
+                {
+                    screenshotPath =
+                        DatabaseManager.Instance.SaveDetectionScreenshot(
+                            reportId: reportId,
+                            objectLabel: label,
+                            jpgBytes: photoState.bestJpegBytes,
+                            imageIndex: 0
+                        );
+                }
             }
 
             for (int i = 0; i < count; i++)
             {
-                if (bestDetection != null)
-                {
-                    DatabaseManager.Instance.SaveDetection(
-                        reportId: reportId,
-                        objectLabel: label,
-                        bboxX: bestDetection.bbox_x,
-                        bboxY: bestDetection.bbox_y,
-                        bboxW: bestDetection.bbox_w,
-                        bboxH: bestDetection.bbox_h,
-                        screenshotPath: ""
-                    );
-                }
-                else
-                {
-                    DatabaseManager.Instance.SaveDetection(
-                        reportId: reportId,
-                        objectLabel: label,
-                        bboxX: 0f,
-                        bboxY: 0f,
-                        bboxW: 0f,
-                        bboxH: 0f,
-                        screenshotPath: ""
-                    );
-                }
+                DatabaseManager.Instance.SaveDetection(
+                    reportId: reportId,
+                    objectLabel: label,
+                    bboxX: bestDetection != null ? bestDetection.bbox_x : 0f,
+                    bboxY: bestDetection != null ? bestDetection.bbox_y : 0f,
+                    bboxW: bestDetection != null ? bestDetection.bbox_w : 0f,
+                    bboxH: bestDetection != null ? bestDetection.bbox_h : 0f,
+                    screenshotPath: screenshotPath
+                );
             }
         }
 
-        Debug.Log("[ScanManager] Saved report " + reportId + " with " + totalCount + " total detections.");
+        Debug.Log(
+            "[ScanManager] Saved report " + reportId +
+            " with " + totalCount + " total detections."
+        );
 
         return reportId;
     }
 
-    // Only ShowScanComplete() has changed. Everything above and below is identical
-    // to your original file. The old text fields (breedingSitesText, scanDurationText,
-    // itemsDetectedText, mitigationPreviewText) are kept as fields above so any
-    // existing Inspector wiring does not break.
     private void ShowScanComplete(int duration)
     {
         if (scanCompleteController == null)
         {
             Debug.LogWarning("[ScanManager] scanCompleteController not assigned in Inspector.");
+
             if (scanCompletePanel != null)
                 scanCompletePanel.SetActive(true);
+
             return;
         }
 
         if (DatabaseManager.Instance == null || lastSavedReportId < 0)
         {
             Debug.LogWarning("[ScanManager] Cannot populate Scan Complete — no saved report.");
+
             if (scanCompletePanel != null)
                 scanCompletePanel.SetActive(true);
+
             return;
         }
 
@@ -405,16 +648,75 @@ public class ScanManager : MonoBehaviour
         return Time.time - scanStartTime;
     }
 
+    // Used by the Fix Sheet to show "X found this scan" for one specific label.
+    public int GetCountForLabel(string label)
+    {
+        string normalizedLabel = NormalizeLabel(label);
+
+        return detectedCounts.ContainsKey(normalizedLabel)
+            ? detectedCounts[normalizedLabel]
+            : 1;
+    }
+
     private int GetTotalDetectedCount()
     {
         int total = 0;
 
         foreach (int count in detectedCounts.Values)
-        {
             total += count;
-        }
 
         return total;
+    }
+
+    private DetectionResult CloneDetection(
+        DetectionResult detection,
+        string normalizedLabel = null
+    )
+    {
+        if (detection == null) return null;
+
+        return new DetectionResult
+        {
+            label = string.IsNullOrWhiteSpace(normalizedLabel)
+                ? detection.label
+                : normalizedLabel,
+            bbox_x = detection.bbox_x,
+            bbox_y = detection.bbox_y,
+            bbox_w = detection.bbox_w,
+            bbox_h = detection.bbox_h,
+            confidence = detection.confidence
+        };
+    }
+
+    private float IoU(DetectionResult a, DetectionResult b)
+    {
+        if (a == null || b == null) return 0f;
+
+        float ax2 = a.bbox_x + a.bbox_w;
+        float ay2 = a.bbox_y + a.bbox_h;
+        float bx2 = b.bbox_x + b.bbox_w;
+        float by2 = b.bbox_y + b.bbox_h;
+
+        float intersectionX1 = Mathf.Max(a.bbox_x, b.bbox_x);
+        float intersectionY1 = Mathf.Max(a.bbox_y, b.bbox_y);
+        float intersectionX2 = Mathf.Min(ax2, bx2);
+        float intersectionY2 = Mathf.Min(ay2, by2);
+
+        float intersectionWidth =
+            Mathf.Max(0f, intersectionX2 - intersectionX1);
+
+        float intersectionHeight =
+            Mathf.Max(0f, intersectionY2 - intersectionY1);
+
+        float intersection =
+            intersectionWidth * intersectionHeight;
+
+        float union =
+            a.bbox_w * a.bbox_h +
+            b.bbox_w * b.bbox_h -
+            intersection;
+
+        return union <= 0f ? 0f : intersection / union;
     }
 
     private string GetDisplayName(string label)
@@ -432,11 +734,9 @@ public class ScanManager : MonoBehaviour
 
         label = label.Trim().ToLowerInvariant();
 
-        // If it already matches the YOLO/database format, keep it.
         if (label.StartsWith("ss_"))
             return label;
 
-        // Backward compatibility for older scripts that may still pass old labels.
         switch (label)
         {
             case "birdbath":

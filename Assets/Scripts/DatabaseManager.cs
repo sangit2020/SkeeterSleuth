@@ -15,13 +15,26 @@ public class DatabaseManager : MonoBehaviour
     {
         get
         {
-            return Path.Combine(Application.persistentDataPath, "skeeter_sleuth.db");
+            return Path.Combine(
+                Application.persistentDataPath,
+                "skeeter_sleuth.db"
+            );
+        }
+    }
+
+    private string DetectionImagesDirectory
+    {
+        get
+        {
+            return Path.Combine(
+                Application.persistentDataPath,
+                "DetectionImages"
+            );
         }
     }
 
     private void Awake()
     {
-        // Keep one database manager available across scenes.
         if (Instance != null && Instance != this)
         {
             Destroy(gameObject);
@@ -57,24 +70,18 @@ public class DatabaseManager : MonoBehaviour
     private void EnsureDatabaseInitialized()
     {
         if (db == null)
-        {
             InitializeDatabase();
-        }
     }
 
     public void InitializeDatabase()
     {
         if (db != null)
-        {
             return;
-        }
 
         string directory = Path.GetDirectoryName(DatabasePath);
 
         if (!Directory.Exists(directory))
-        {
             Directory.CreateDirectory(directory);
-        }
 
         db = new SQLiteConnection(DatabasePath);
 
@@ -90,9 +97,6 @@ public class DatabaseManager : MonoBehaviour
 
     private void SeedObjectTypesAndMitigations()
     {
-        // IMPORTANT:
-        // These labels must exactly match the raw YOLO output strings from the YAML file.
-
         SeedObjectType(
             label: "ss_birdbath",
             displayName: "Bird Bath",
@@ -101,7 +105,6 @@ public class DatabaseManager : MonoBehaviour
             mitigationDescription: "Empty and scrub the bird bath regularly. Change the water at least once a week. Keep the basin clean to prevent mosquito larvae."
         );
 
-        // Keep the spelling exactly as it appears in the YAML/model.
         SeedObjectType(
             label: "ss_bromiliad",
             displayName: "Bromeliad",
@@ -231,8 +234,6 @@ public class DatabaseManager : MonoBehaviour
         else
         {
             objectTypeId = existingObjectType.id;
-
-            // Keep seed data updated if we improve names/descriptions later.
             existingObjectType.display_name = displayName;
             existingObjectType.description = description;
             existingObjectType.icon_asset_path = iconAssetPath;
@@ -260,7 +261,11 @@ public class DatabaseManager : MonoBehaviour
         }
     }
 
-    public int SaveReport(int durationSeconds, int totalObjectsDetected, string notes = "")
+    public int SaveReport(
+        int durationSeconds,
+        int totalObjectsDetected,
+        string notes = ""
+    )
     {
         EnsureDatabaseInitialized();
 
@@ -277,6 +282,72 @@ public class DatabaseManager : MonoBehaviour
         Debug.Log("Saved ScanReport ID: " + report.id);
 
         return report.id;
+    }
+
+    public string SaveDetectionScreenshot(
+        int reportId,
+        string objectLabel,
+        byte[] jpgBytes,
+        int imageIndex = 0
+    )
+    {
+        if (jpgBytes == null || jpgBytes.Length == 0)
+        {
+            Debug.LogWarning("[DatabaseManager] Detection screenshot bytes were empty.");
+            return "";
+        }
+
+        try
+        {
+            if (!Directory.Exists(DetectionImagesDirectory))
+                Directory.CreateDirectory(DetectionImagesDirectory);
+
+            string safeLabel = SanitizeFileNamePart(objectLabel);
+
+            string fileName =
+                "report_" + reportId +
+                "_" + safeLabel +
+                "_" + imageIndex +
+                "_" + DateTime.UtcNow.ToString("yyyyMMdd_HHmmssfff") +
+                ".jpg";
+
+            string fullPath = Path.Combine(
+                DetectionImagesDirectory,
+                fileName
+            );
+
+            File.WriteAllBytes(fullPath, jpgBytes);
+
+            Debug.Log("[DatabaseManager] Saved detection screenshot: " + fullPath);
+
+            return fullPath;
+        }
+        catch (Exception e)
+        {
+            Debug.LogError(
+                "[DatabaseManager] Failed to save detection screenshot: " +
+                e.Message
+            );
+
+            return "";
+        }
+    }
+
+    private string SanitizeFileNamePart(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "unknown";
+
+        char[] invalidCharacters = Path.GetInvalidFileNameChars();
+
+        char[] sanitized = value
+            .Select(character =>
+                invalidCharacters.Contains(character)
+                    ? '_'
+                    : character)
+            .ToArray();
+
+        return new string(sanitized);
     }
 
     public int SaveDetection(
@@ -303,7 +374,10 @@ public class DatabaseManager : MonoBehaviour
 
         if (objectType == null)
         {
-            Debug.LogError("Could not save detection. Unknown object label: " + objectLabel);
+            Debug.LogError(
+                "Could not save detection. Unknown object label: " +
+                objectLabel
+            );
             return -1;
         }
 
@@ -321,17 +395,22 @@ public class DatabaseManager : MonoBehaviour
 
         db.Insert(detection);
 
-        Debug.Log("Saved Detection ID: " + detection.id + " for object: " + objectLabel);
+        Debug.Log(
+            "Saved Detection ID: " + detection.id +
+            " for object: " + objectLabel
+        );
 
         return detection.id;
     }
 
-    public List<DetectionWithDetails> GetDetectionsForReport(int reportId)
+    public List<DetectionWithDetails> GetDetectionsForReport(
+        int reportId
+    )
     {
         EnsureDatabaseInitialized();
 
         string query = @"
-            SELECT 
+            SELECT
                 Detection.id AS detection_id,
                 Detection.report_id AS report_id,
                 ObjectType.display_name AS display_name,
@@ -341,8 +420,10 @@ public class DatabaseManager : MonoBehaviour
                 Detection.screenshot_path AS screenshot_path,
                 Detection.detected_at AS detected_at
             FROM Detection
-            INNER JOIN ObjectType ON Detection.object_type_id = ObjectType.id
-            LEFT JOIN Mitigation ON Mitigation.object_type_id = ObjectType.id
+            INNER JOIN ObjectType
+                ON Detection.object_type_id = ObjectType.id
+            LEFT JOIN Mitigation
+                ON Mitigation.object_type_id = ObjectType.id
             WHERE Detection.report_id = ?
         ";
 
@@ -380,15 +461,50 @@ public class DatabaseManager : MonoBehaviour
     {
         EnsureDatabaseInitialized();
 
-        // Delete detections first because they belong to scan reports.
-        db.DeleteAll<Detection>();
+        List<string> screenshotPaths = db.Table<Detection>()
+            .ToList()
+            .Select(detection => detection.screenshot_path)
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct()
+            .ToList();
 
-        // Then delete the actual scan report rows.
+        foreach (string screenshotPath in screenshotPaths)
+        {
+            try
+            {
+                if (File.Exists(screenshotPath))
+                    File.Delete(screenshotPath);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning(
+                    "[DatabaseManager] Could not delete screenshot " +
+                    screenshotPath + ": " + e.Message
+                );
+            }
+        }
+
+        db.DeleteAll<Detection>();
         db.DeleteAll<ScanReport>();
+
+        try
+        {
+            if (Directory.Exists(DetectionImagesDirectory) &&
+                Directory.GetFiles(DetectionImagesDirectory).Length == 0)
+            {
+                Directory.Delete(DetectionImagesDirectory);
+            }
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning(
+                "[DatabaseManager] Could not clean screenshot directory: " +
+                e.Message
+            );
+        }
 
         Debug.Log("[DatabaseManager] Scan history cleared.");
     }
-
 }
 
 [Serializable]
