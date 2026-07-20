@@ -11,6 +11,10 @@
 //
 // Or, if you already have a specific report ID:
 //   ReportUIBuilder.Instance.ShowReport(reportId);
+//
+// Editor preview:
+//   Enable "Show Mock Report On Start" in the Inspector, or use the component
+//   context-menu commands while Unity is in Play Mode.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 using System;
@@ -26,6 +30,21 @@ public class ReportUIBuilder : MonoBehaviour
 
     [Header("Canvas — auto-found if left empty")]
     public Canvas targetCanvas;
+
+#if UNITY_EDITOR
+    [Header("Editor-only Mock Preview")]
+    [Tooltip("Automatically opens mock report data after entering Play Mode.")]
+    public bool showMockReportOnStart = false;
+
+    [Tooltip("When mock preview is enabled, open the first Item Detail page instead of the Full Report list.")]
+    public bool openMockItemDetailOnStart = true;
+
+    [Tooltip("Optional photo shown in the mock Item Detail page. Import a crop as Sprite (2D and UI) and drag it here. If empty, the normal object icon is used.")]
+    public Sprite mockDetectionPhoto;
+
+    const string MOCK_SCREENSHOT_PATH = "__REPORT_UI_MOCK_PHOTO__";
+    bool _usingMockData;
+#endif
 
     // ─── Color palette ────────────────────────────────────────────────────────
     static readonly Color C_BG             = HexColor("#1D2E1F"); // Main app background
@@ -115,6 +134,13 @@ public class ReportUIBuilder : MonoBehaviour
 
         _reportListPanel.SetActive(false);
         _itemDetailPanel.SetActive(false);
+
+#if UNITY_EDITOR
+        if (showMockReportOnStart)
+        {
+            LoadMockReport(openMockItemDetailOnStart);
+        }
+#endif
     }
 
     public void ShowLatestReport()
@@ -144,6 +170,10 @@ public class ReportUIBuilder : MonoBehaviour
 
     public void ShowReport(int reportId)
     {
+#if UNITY_EDITOR
+        _usingMockData = false;
+#endif
+
         ScanReport report = null;
         List<DetectionWithDetails> detections = null;
 
@@ -170,6 +200,83 @@ public class ReportUIBuilder : MonoBehaviour
 
         DisplayReport(report, detections);
     }
+
+#if UNITY_EDITOR
+    /// <summary>
+    /// Play Mode helper: opens a complete mock report without touching SQLite.
+    /// Use the component context menu "Show Mock Full Report" or enable
+    /// showMockReportOnStart in the Inspector.
+    /// </summary>
+    [ContextMenu("Show Mock Full Report")]
+    public void ShowMockFullReport()
+    {
+        LoadMockReport(false);
+    }
+
+    /// <summary>
+    /// Play Mode helper: opens the redesigned Item Detail screen immediately.
+    /// Assign mockDetectionPhoto in the Inspector to preview a real crop.
+    /// </summary>
+    [ContextMenu("Show Mock Item Detail")]
+    public void ShowMockItemDetail()
+    {
+        LoadMockReport(true);
+    }
+
+    void LoadMockReport(bool openItemDetail)
+    {
+        if (_reportListPanel == null || _itemDetailPanel == null)
+        {
+            Debug.LogWarning("[ReportUIBuilder] Enter Play Mode before opening the mock preview.");
+            return;
+        }
+
+        _usingMockData = true;
+
+        var mockReport = new ScanReport
+        {
+            id = -1,
+            scanned_at = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+            duration_seconds = 86,
+            total_objects_detected = 3
+        };
+
+        var mockDetections = new List<DetectionWithDetails>
+        {
+            new DetectionWithDetails
+            {
+                label = "ss_bucket",
+                display_name = "Bucket",
+                object_description = "Buckets can collect rainwater and become mosquito breeding sites when left outside.",
+                mitigation_description = "Empty the bucket after rain; Store it upside down; Keep it covered when not in use",
+                screenshot_path = MOCK_SCREENSHOT_PATH
+            },
+            new DetectionWithDetails
+            {
+                label = "ss_birdbath",
+                display_name = "Birdbath",
+                object_description = "Standing water in a birdbath can support mosquito larvae when the water is not replaced regularly.",
+                mitigation_description = "Replace the water at least once each week; Scrub the inside before refilling; Keep the basin moving with a fountain when possible",
+                screenshot_path = MOCK_SCREENSHOT_PATH
+            },
+            new DetectionWithDetails
+            {
+                label = "ss_tire",
+                display_name = "Tire",
+                object_description = "Discarded tires trap rainwater in protected spaces that are difficult to drain and ideal for mosquitoes.",
+                mitigation_description = "Remove unused tires from the yard; Store needed tires under cover; Drain any water immediately",
+                screenshot_path = MOCK_SCREENSHOT_PATH
+            }
+        };
+
+        DisplayReport(mockReport, mockDetections);
+
+        if (openItemDetail)
+        {
+            ShowItemDetail(0);
+        }
+    }
+#endif
 
     public void ShowItemDetail(int index)
     {
@@ -326,9 +433,9 @@ public class ReportUIBuilder : MonoBehaviour
 
                 for (int i = 0; i < steps.Count; i++)
                 {
-                    // Keep the fix text white, but make the bullet itself green
-                    // to match the reference style more closely.
-                    sb.Append("<color=#5ED9C0>•</color> ").Append(steps[i]);
+                    // Green checkmarks make the recommendations read like clear,
+                    // actionable steps while keeping the existing color palette.
+                    sb.Append("<color=#5ED9C0>✓</color> ").Append(steps[i]);
 
                     if (i < steps.Count - 1)
                     {
@@ -351,7 +458,7 @@ public class ReportUIBuilder : MonoBehaviour
         string risk = GetRiskLevel(d.label);
         var (riskBg, riskText) = RiskBadgeColors(risk);
 
-        _detailRiskBadgeText.text = risk + " risk";
+        _detailRiskBadgeText.text = risk.ToUpperInvariant() + " RISK";
         _detailRiskBadgeBg.color = riskBg;
         _detailRiskBadgeText.color = riskText;
 
@@ -366,12 +473,30 @@ public class ReportUIBuilder : MonoBehaviour
 
             Sprite detailSprite = null;
 
+#if UNITY_EDITOR
+            // The editor mock preview can use a Sprite assigned directly in the
+            // Inspector, so testing the layout never requires a database image path.
+            if (_usingMockData &&
+                d.screenshot_path == MOCK_SCREENSHOT_PATH &&
+                mockDetectionPhoto != null)
+            {
+                detailSprite = mockDetectionPhoto;
+            }
+#endif
+
             // Detection photos are used ONLY on the Item Detail page.
             // The Full Report cards remain unchanged and continue using
             // LoadObjectIcon(d.label) inside CreateDetectedItemCard().
-            if (!string.IsNullOrWhiteSpace(d.screenshot_path))
+            if (detailSprite == null && !string.IsNullOrWhiteSpace(d.screenshot_path))
             {
+#if UNITY_EDITOR
+                if (!_usingMockData)
+                {
+                    detailSprite = LoadDetectionPhotoForDetail(d.screenshot_path);
+                }
+#else
                 detailSprite = LoadDetectionPhotoForDetail(d.screenshot_path);
+#endif
             }
 
             // Old reports, missing files, or failed image loads use the original
@@ -799,60 +924,55 @@ public class ReportUIBuilder : MonoBehaviour
 
         RectTransform content = scroll.Find("Viewport/Content").GetComponent<RectTransform>();
 
+        // The Item Detail page uses slightly tighter spacing than the report list.
+        // This keeps the larger photo prominent without making the page feel loose.
+        VerticalLayoutGroup detailContentLayout = content.GetComponent<VerticalLayoutGroup>();
+        detailContentLayout.spacing = 14;
+        detailContentLayout.padding = new RectOffset(20, 20, 18, 24);
+
         // ─────────────────────────────────────────────────────────────────
-        // ITEM SUMMARY / RISK LEVEL
+        // DETECTION PHOTO / RISK BADGE
         // ─────────────────────────────────────────────────────────────────
-        // Two-card summary row:
-        //   • left: large #2E583D object icon tile so the PNG background blends in
-        //   • right: clean risk-level tile with only the risk label and badge
-        var summaryRow = new GameObject(
-            "ItemSummaryRow",
-            typeof(RectTransform),
-            typeof(LayoutElement),
-            typeof(HorizontalLayoutGroup)
-        );
-
-        summaryRow.transform.SetParent(content, false);
-        summaryRow.GetComponent<LayoutElement>().preferredHeight = 128;
-
-        var summaryLayout = summaryRow.GetComponent<HorizontalLayoutGroup>();
-        summaryLayout.spacing = 12;
-        summaryLayout.padding = new RectOffset(0, 0, 0, 0);
-        summaryLayout.childControlWidth = true;
-        summaryLayout.childControlHeight = true;
-        summaryLayout.childForceExpandWidth = false;
-        summaryLayout.childForceExpandHeight = true;
-
-        // Large icon tile. It intentionally uses #2E583D to match the icon PNG background.
-        var detailIcon = new GameObject(
-            "DetailObjectIconTile",
+        // The crop is placed in one consistent, full-width frame. Individual
+        // bounding-box crops may be tall, wide, or square, but preserveAspect
+        // keeps the whole detected object visible without changing the page layout.
+        var photoCard = new GameObject(
+            "DetailDetectionPhotoCard",
             typeof(RectTransform),
             typeof(Image),
+            typeof(Outline),
             typeof(LayoutElement)
         );
 
-        detailIcon.transform.SetParent(summaryRow.transform, false);
+        photoCard.transform.SetParent(content, false);
+        photoCard.GetComponent<LayoutElement>().preferredHeight = 220;
 
-        var detailIconLayout = detailIcon.GetComponent<LayoutElement>();
-        detailIconLayout.preferredWidth = 128;
-        detailIconLayout.preferredHeight = 128;
-        detailIconLayout.flexibleWidth = 0;
+        // Match the Why Risk and What To Do containers exactly: the same card
+        // background, rounded corners, outline color, and outline thickness.
+        Image photoBorder = photoCard.GetComponent<Image>();
+        photoBorder.color = C_CARD;
+        photoBorder.raycastTarget = false;
+        SetRounded(photoBorder, 16);
 
-        Image detailIconBg = detailIcon.GetComponent<Image>();
-        detailIconBg.color = C_ICON_BG;
-        detailIconBg.raycastTarget = false;
-        SetRounded(detailIconBg, 18);
+        Outline photoOutline = photoCard.GetComponent<Outline>();
+        photoOutline.effectColor = C_CARD_BORDER;
+        photoOutline.effectDistance = new Vector2(1.5f, -1.5f);
+        photoOutline.useGraphicAlpha = false;
 
-        var detailSpriteGo = new GameObject("DetailObjectIconImage", typeof(RectTransform), typeof(Image));
-        detailSpriteGo.transform.SetParent(detailIcon.transform, false);
+        var detailSpriteGo = new GameObject(
+            "DetailObjectIconImage",
+            typeof(RectTransform),
+            typeof(Image)
+        );
+        detailSpriteGo.transform.SetParent(photoCard.transform, false);
 
         RectTransform detailSpriteRect = detailSpriteGo.GetComponent<RectTransform>();
         SetAnchors(
             detailSpriteRect,
             Vector2.zero,
             Vector2.one,
-            new Vector2(9f, 9f),
-            new Vector2(-9f, -9f)
+            new Vector2(2f, 2f),
+            new Vector2(-2f, -2f)
         );
 
         _detailObjectIconImageObject = detailSpriteGo;
@@ -861,57 +981,62 @@ public class ReportUIBuilder : MonoBehaviour
         _detailObjectIconImage.preserveAspect = true;
         _detailObjectIconImage.raycastTarget = false;
 
-        var detailFallbackGo = new GameObject("DetailObjectIconFallback", typeof(RectTransform), typeof(TextMeshProUGUI));
-        detailFallbackGo.transform.SetParent(detailIcon.transform, false);
+        var detailFallbackGo = new GameObject(
+            "DetailObjectIconFallback",
+            typeof(RectTransform),
+            typeof(TextMeshProUGUI)
+        );
+        detailFallbackGo.transform.SetParent(photoCard.transform, false);
 
         RectTransform detailFallbackRect = detailFallbackGo.GetComponent<RectTransform>();
         detailFallbackRect.anchorMin = Vector2.zero;
         detailFallbackRect.anchorMax = Vector2.one;
-        detailFallbackRect.sizeDelta = Vector2.zero;
+        detailFallbackRect.offsetMin = new Vector2(20f, 20f);
+        detailFallbackRect.offsetMax = new Vector2(-20f, -20f);
 
         _detailObjectIconFallback = detailFallbackGo.GetComponent<TextMeshProUGUI>();
         _detailObjectIconFallback.text = "?";
-        _detailObjectIconFallback.fontSize = 22;
+        _detailObjectIconFallback.fontSize = 30;
         _detailObjectIconFallback.color = C_SECTION_HEADER;
         _detailObjectIconFallback.fontStyle = FontStyles.Bold;
         _detailObjectIconFallback.alignment = TextAlignmentOptions.Center;
         _detailObjectIconFallback.raycastTarget = false;
         detailFallbackGo.SetActive(false);
 
-        // Separate risk tile. This keeps the right side from feeling like empty space
-        // while keeping the content simple: just the label and the risk badge.
-        var riskTile = MakeCard("DetailRiskTile", summaryRow.transform, 128);
-        riskTile.GetComponent<LayoutElement>().flexibleWidth = 1;
-        RectTransform riskTileRect = riskTile.GetComponent<RectTransform>();
-
-        var riskLabel = MakeText(
-            "DetailRiskLabel",
-            riskTileRect,
-            "RISK LEVEL",
-            12,
-            C_SECTION_HEADER,
-            FontStyles.Bold,
-            new Vector2(0, 1),
-            new Vector2(1, 1),
-            new Vector2(16, -42),
-            new Vector2(-16, -20)
-        );
-        riskLabel.alignment = TextAlignmentOptions.Center;
-        riskLabel.characterSpacing = 2f;
-
+        // Compact risk badge over the photo instead of a second large card.
         _detailRiskBadgeBg = MakeBadge(
             "DetailRiskBadge",
-            riskTileRect,
-            "High risk",
+            photoCard.transform,
+            "HIGH RISK",
             C_HIGH_BADGE_BG,
             C_HIGH_BADGE_TEXT,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0, -10),
-            new Vector2(150, 36),
-            13
+            new Vector2(1f, 1f),
+            new Vector2(-14f, -14f),
+            new Vector2(116f, 32f),
+            12f
         );
-
+        _detailRiskBadgeBg.raycastTarget = false;
         _detailRiskBadgeText = _detailRiskBadgeBg.GetComponentInChildren<TextMeshProUGUI>();
+        _detailRiskBadgeText.characterSpacing = 0.8f;
+
+        // Small caption clarifies that the image came from the user's scan.
+        var capturedLabelGo = new GameObject(
+            "DetectionCapturedLabel",
+            typeof(RectTransform),
+            typeof(TextMeshProUGUI),
+            typeof(LayoutElement)
+        );
+        capturedLabelGo.transform.SetParent(content, false);
+        capturedLabelGo.GetComponent<LayoutElement>().preferredHeight = 22;
+
+        TextMeshProUGUI capturedLabel = capturedLabelGo.GetComponent<TextMeshProUGUI>();
+        capturedLabel.text = "Detection captured during scan";
+        capturedLabel.fontSize = 12;
+        capturedLabel.color = C_SUBTEXT;
+        capturedLabel.fontStyle = FontStyles.Normal;
+        capturedLabel.alignment = TextAlignmentOptions.MidlineLeft;
+        capturedLabel.margin = new Vector4(4, 0, 4, 0);
+        capturedLabel.raycastTarget = false;
 
         // ─────────────────────────────────────────────────────────────────
         // WHY IT'S A RISK
@@ -941,13 +1066,42 @@ public class ReportUIBuilder : MonoBehaviour
         // ─────────────────────────────────────────────────────────────────
         // Built outside the ScrollRect so these controls stay pinned near the
         // bottom of the screen while the item details scroll above them.
+        var navArea = new GameObject(
+            "FixedNavArea",
+            typeof(RectTransform),
+            typeof(Image)
+        );
+        navArea.transform.SetParent(root, false);
+
+        RectTransform navAreaRect = navArea.GetComponent<RectTransform>();
+        SetAnchors(
+            navAreaRect,
+            new Vector2(0, 0),
+            new Vector2(1, 0),
+            new Vector2(0, 0),
+            new Vector2(0, 104)
+        );
+        navArea.GetComponent<Image>().color = C_BG;
+
+        var navDivider = new GameObject("TopDivider", typeof(RectTransform), typeof(Image));
+        navDivider.transform.SetParent(navArea.transform, false);
+        RectTransform dividerRect = navDivider.GetComponent<RectTransform>();
+        SetAnchors(
+            dividerRect,
+            new Vector2(0, 1),
+            new Vector2(1, 1),
+            new Vector2(20, -1),
+            new Vector2(-20, 0)
+        );
+        navDivider.GetComponent<Image>().color = C_DIVIDER;
+
         var navRow = new GameObject(
             "FixedNavRow",
             typeof(RectTransform),
             typeof(HorizontalLayoutGroup)
         );
 
-        navRow.transform.SetParent(root, false);
+        navRow.transform.SetParent(navArea.transform, false);
 
         RectTransform navRect = navRow.GetComponent<RectTransform>();
         SetAnchors(
@@ -1334,14 +1488,14 @@ public class ReportUIBuilder : MonoBehaviour
         outline.useGraphicAlpha = false;
 
         var vlg = go.GetComponent<VerticalLayoutGroup>();
-        vlg.padding = new RectOffset(20, 20, 20, 20);
+        vlg.padding = new RectOffset(18, 18, 17, 17);
         vlg.childControlWidth = true;
         vlg.childControlHeight = true;
         vlg.childForceExpandWidth = true;
         vlg.childForceExpandHeight = false;
 
         go.GetComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-        go.GetComponent<LayoutElement>().minHeight = 72;
+        go.GetComponent<LayoutElement>().minHeight = 64;
 
         return go;
     }

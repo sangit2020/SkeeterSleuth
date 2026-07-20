@@ -1040,6 +1040,11 @@ MonoBehaviour:
   scanCompleteController: {fileID: 543790154}
   yoloInference: {fileID: 2038752590}
   openReportImmediatelyAfterScan: 0
+  captureDetectionPhotos: 1
+  cropCandidateFrameWindow: 3
+  cropPaddingPercent: 0.2
+  cropMatchIouThreshold: 0.15
+  cropJpegQuality: 85
 --- !u!4 &144995575
 Transform:
   m_ObjectHideFlags: 0
@@ -1106,6 +1111,14 @@ PrefabInstance:
     - target: {fileID: 2236190810966942366, guid: f22ddbab1466f0f4690b6f15a669bcdf, type: 3}
       propertyPath: m_Name
       value: ReportUIManager
+      objectReference: {fileID: 0}
+    - target: {fileID: 5217052912004203515, guid: f22ddbab1466f0f4690b6f15a669bcdf, type: 3}
+      propertyPath: mockDetectionPhoto
+      value: 
+      objectReference: {fileID: -4770960272869957185, guid: 215687feeab0b7445b4a1cd86c82c2e1, type: 3}
+    - target: {fileID: 5217052912004203515, guid: f22ddbab1466f0f4690b6f15a669bcdf, type: 3}
+      propertyPath: showMockReportOnStart
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 5217052912004203515, guid: f22ddbab1466f0f4690b6f15a669bcdf, type: 3}
       propertyPath: useMockDataForUIDebugging
@@ -9523,6 +9536,8 @@ MonoBehaviour:
   nmsIouThreshold: 0.45
   classAgnosticNms: 1
   inferenceIntervalSeconds: 0.12
+  flipSavedCropsVertically: 1
+  flipSavedCropsHorizontally: 0
 --- !u!4 &2038752591
 Transform:
   m_ObjectHideFlags: 0
