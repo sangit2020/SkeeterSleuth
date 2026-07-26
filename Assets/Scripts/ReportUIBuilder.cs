@@ -95,6 +95,7 @@ public class ReportUIBuilder : MonoBehaviour
     Image _detailObjectIconImage;
     GameObject _detailObjectIconImageObject;
     TextMeshProUGUI _detailObjectIconFallback;
+    AspectRatioFitter _detailPhotoAspectFitter;
 
     // Loaded only for the Item Detail page. The Full Report list continues to
     // use the existing Resources/Icons sprites in CreateDetectedItemCard().
@@ -512,6 +513,16 @@ public class ReportUIBuilder : MonoBehaviour
                 _detailObjectIconImage.preserveAspect = true;
                 _detailObjectIconImageObject.SetActive(true);
                 _detailObjectIconFallback.gameObject.SetActive(false);
+
+                // Fill the fixed photo frame without stretching. Wide and tall
+                // crops keep their real aspect ratio; any excess is clipped by the
+                // rounded viewport so no colored container is visible.
+                if (_detailPhotoAspectFitter != null &&
+                    detailSprite.rect.height > 0f)
+                {
+                    _detailPhotoAspectFitter.aspectRatio =
+                        detailSprite.rect.width / detailSprite.rect.height;
+                }
             }
             else
             {
@@ -933,60 +944,87 @@ public class ReportUIBuilder : MonoBehaviour
         // ─────────────────────────────────────────────────────────────────
         // DETECTION PHOTO / RISK BADGE
         // ─────────────────────────────────────────────────────────────────
-        // The crop is placed in one consistent, full-width frame. Individual
-        // bounding-box crops may be tall, wide, or square, but preserveAspect
-        // keeps the whole detected object visible without changing the page layout.
-        var photoCard = new GameObject(
-            "DetailDetectionPhotoCard",
+        // The frame is a thin C_CARD_BORDER ring around the photo. There is no
+        // C_CARD or C_ICON_BG container behind it. The photo aspect-fills a
+        // rounded mask, so every crop fills the frame without stretching or
+        // leaving colored letterboxing.
+        var photoFrame = new GameObject(
+            "DetailDetectionPhotoFrame",
             typeof(RectTransform),
             typeof(Image),
-            typeof(Outline),
             typeof(LayoutElement)
         );
 
-        photoCard.transform.SetParent(content, false);
-        photoCard.GetComponent<LayoutElement>().preferredHeight = 220;
+        photoFrame.transform.SetParent(content, false);
 
-        // Match the Why Risk and What To Do containers exactly: the same card
-        // background, rounded corners, outline color, and outline thickness.
-        Image photoBorder = photoCard.GetComponent<Image>();
-        photoBorder.color = C_CARD;
-        photoBorder.raycastTarget = false;
-        SetRounded(photoBorder, 16);
+        LayoutElement photoFrameLayout = photoFrame.GetComponent<LayoutElement>();
+        photoFrameLayout.preferredHeight = 210f;
+        photoFrameLayout.minHeight = 210f;
 
-        Outline photoOutline = photoCard.GetComponent<Outline>();
-        photoOutline.effectColor = C_CARD_BORDER;
-        photoOutline.effectDistance = new Vector2(1.5f, -1.5f);
-        photoOutline.useGraphicAlpha = false;
+        // This visible outer image is only the thin green border.
+        Image photoFrameBorder = photoFrame.GetComponent<Image>();
+        photoFrameBorder.color = C_CARD_BORDER;
+        photoFrameBorder.raycastTarget = false;
+        SetRounded(photoFrameBorder, 16f);
+
+        // Inset rounded viewport. The loaded photo completely covers this mask,
+        // leaving only the 1.5 px border visible around the outside.
+        var photoViewport = new GameObject(
+            "PhotoViewport",
+            typeof(RectTransform),
+            typeof(Image),
+            typeof(Mask)
+        );
+        photoViewport.transform.SetParent(photoFrame.transform, false);
+
+        RectTransform photoViewportRect = photoViewport.GetComponent<RectTransform>();
+        SetAnchors(
+            photoViewportRect,
+            Vector2.zero,
+            Vector2.one,
+            new Vector2(1.5f, 1.5f),
+            new Vector2(-1.5f, -1.5f)
+        );
+
+        Image photoViewportGraphic = photoViewport.GetComponent<Image>();
+        photoViewportGraphic.color = Color.white;
+        photoViewportGraphic.raycastTarget = false;
+        SetRounded(photoViewportGraphic, 14.5f);
+
+        Mask photoMask = photoViewport.GetComponent<Mask>();
+        photoMask.showMaskGraphic = true;
 
         var detailSpriteGo = new GameObject(
             "DetailObjectIconImage",
             typeof(RectTransform),
-            typeof(Image)
+            typeof(Image),
+            typeof(AspectRatioFitter)
         );
-        detailSpriteGo.transform.SetParent(photoCard.transform, false);
+        detailSpriteGo.transform.SetParent(photoViewport.transform, false);
 
         RectTransform detailSpriteRect = detailSpriteGo.GetComponent<RectTransform>();
-        SetAnchors(
-            detailSpriteRect,
-            Vector2.zero,
-            Vector2.one,
-            new Vector2(2f, 2f),
-            new Vector2(-2f, -2f)
-        );
+        detailSpriteRect.anchorMin = new Vector2(0.5f, 0.5f);
+        detailSpriteRect.anchorMax = new Vector2(0.5f, 0.5f);
+        detailSpriteRect.pivot = new Vector2(0.5f, 0.5f);
+        detailSpriteRect.anchoredPosition = Vector2.zero;
+        detailSpriteRect.sizeDelta = Vector2.one;
 
         _detailObjectIconImageObject = detailSpriteGo;
         _detailObjectIconImage = detailSpriteGo.GetComponent<Image>();
         _detailObjectIconImage.color = Color.white;
-        _detailObjectIconImage.preserveAspect = true;
+        _detailObjectIconImage.preserveAspect = false;
         _detailObjectIconImage.raycastTarget = false;
+
+        _detailPhotoAspectFitter = detailSpriteGo.GetComponent<AspectRatioFitter>();
+        _detailPhotoAspectFitter.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
+        _detailPhotoAspectFitter.aspectRatio = 4f / 3f;
 
         var detailFallbackGo = new GameObject(
             "DetailObjectIconFallback",
             typeof(RectTransform),
             typeof(TextMeshProUGUI)
         );
-        detailFallbackGo.transform.SetParent(photoCard.transform, false);
+        detailFallbackGo.transform.SetParent(photoFrame.transform, false);
 
         RectTransform detailFallbackRect = detailFallbackGo.GetComponent<RectTransform>();
         detailFallbackRect.anchorMin = Vector2.zero;
@@ -1003,10 +1041,10 @@ public class ReportUIBuilder : MonoBehaviour
         _detailObjectIconFallback.raycastTarget = false;
         detailFallbackGo.SetActive(false);
 
-        // Compact risk badge over the photo instead of a second large card.
+        // Compact risk badge remains over the photo.
         _detailRiskBadgeBg = MakeBadge(
             "DetailRiskBadge",
-            photoCard.transform,
+            photoFrame.transform,
             "HIGH RISK",
             C_HIGH_BADGE_BG,
             C_HIGH_BADGE_TEXT,
