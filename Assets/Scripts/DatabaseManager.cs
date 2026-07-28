@@ -110,7 +110,7 @@ public class DatabaseManager : MonoBehaviour
             displayName: "Bromeliad",
             description: "Bromeliads can collect water between their leaves, which may create a small mosquito breeding site.",
             iconAssetPath: "Icons/ss_bromiliad",
-            mitigationDescription: "Flush the plant regularly with fresh water. Remove excess standing water from leaf pockets when possible. Monitor the plant after rain."
+            mitigationDescription: "Flush the water-holding leaf pockets with a strong stream of fresh water at least once a week. Use a Bti larvicide labeled for bromeliads when regular flushing is not practical. Follow all product label directions."
         );
 
         SeedObjectType(
@@ -134,7 +134,7 @@ public class DatabaseManager : MonoBehaviour
             displayName: "Inflatable Pool",
             description: "Inflatable pools can hold large amounts of standing water and quickly become mosquito breeding sites when unused.",
             iconAssetPath: "Icons/ss_inflatablepool",
-            mitigationDescription: "Drain the pool when not in use. Store it indoors or upside down. Refresh and treat the water if it must remain filled."
+            mitigationDescription: "Drain and scrub the pool when it is not in use. Store it indoors, deflated, or upside down after it dries. If it must remain filled, maintain proper disinfectant and circulation according to the manufacturer's directions."
         );
 
         SeedObjectType(
@@ -166,7 +166,7 @@ public class DatabaseManager : MonoBehaviour
             displayName: "Tree Hole",
             description: "Tree holes can naturally collect rainwater and may become mosquito breeding sites.",
             iconAssetPath: "Icons/ss_treehole",
-            mitigationDescription: "Fill small tree holes with sand or expandable foam if appropriate. Monitor after rain. Avoid damaging the tree."
+            mitigationDescription: "Only fill tree holes that actually hold water. Use water-resistant expanding foam and follow the product label. Do not use sand, gravel, concrete, or drill drainage holes."
         );
 
         SeedObjectType(
@@ -174,7 +174,7 @@ public class DatabaseManager : MonoBehaviour
             displayName: "Water Hyacinth",
             description: "Floating aquatic plants like water hyacinth can create sheltered areas where mosquitoes may breed.",
             iconAssetPath: "Icons/ss_waterhyacinth",
-            mitigationDescription: "Thin or remove excess plants. Keep water moving when possible. Monitor ponds or containers for mosquito larvae."
+            mitigationDescription: "Remove or thin dense mats of water hyacinth where permitted. Restore open water and circulation around remaining plants. Contact local aquatic-plant or mosquito control for large infestations."
         );
 
         SeedObjectType(
@@ -190,7 +190,7 @@ public class DatabaseManager : MonoBehaviour
             displayName: "Water Lettuce",
             description: "Water lettuce can create sheltered standing-water areas that may support mosquito breeding.",
             iconAssetPath: "Icons/ss_waterlettuce",
-            mitigationDescription: "Remove excess plant growth. Keep water circulating when possible. Check regularly for mosquito larvae."
+            mitigationDescription: "Remove or thin dense mats of water lettuce. Restore open water and circulation around remaining plants. Contact local aquatic-plant or mosquito control if growth is extensive or larvae persist."
         );
 
         SeedObjectType(

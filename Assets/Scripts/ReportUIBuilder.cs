@@ -89,7 +89,7 @@ public class ReportUIBuilder : MonoBehaviour
     TextMeshProUGUI _detailTitle;
     TextMeshProUGUI _detailSubtitle;
     TextMeshProUGUI _detailWhyRisk;
-    TextMeshProUGUI _detailWhatToDo;
+    Transform _detailWhatToDoStepsContainer;
     Image _detailRiskBadgeBg;
     TextMeshProUGUI _detailRiskBadgeText;
     Image _detailObjectIconImage;
@@ -424,37 +424,10 @@ public class ReportUIBuilder : MonoBehaviour
             ? "No risk description available for this item."
             : d.object_description;
 
-        if (!string.IsNullOrWhiteSpace(d.mitigation_description))
-        {
-            List<string> steps = SplitMitigationSteps(d.mitigation_description);
-
-            if (steps.Count > 0)
-            {
-                var sb = new System.Text.StringBuilder();
-
-                for (int i = 0; i < steps.Count; i++)
-                {
-                    // Green checkmarks make the recommendations read like clear,
-                    // actionable steps while keeping the existing color palette.
-                    sb.Append("<color=#5ED9C0>✓</color> ").Append(steps[i]);
-
-                    if (i < steps.Count - 1)
-                    {
-                        sb.Append("\n");
-                    }
-                }
-
-                _detailWhatToDo.text = sb.ToString();
-            }
-            else
-            {
-                _detailWhatToDo.text = "No mitigation information available for this item.";
-            }
-        }
-        else
-        {
-            _detailWhatToDo.text = "No mitigation information available for this item.";
-        }
+        // Build each recommendation as its own row with a real UI check icon.
+        // The check is drawn from two Image bars, so it does not depend on the
+        // active TextMesh Pro font containing a checkmark character.
+        PopulateMitigationSteps(d.mitigation_description);
 
         string risk = GetRiskLevel(d.label);
         var (riskBg, riskText) = RiskBadgeColors(risk);
@@ -1091,9 +1064,12 @@ public class ReportUIBuilder : MonoBehaviour
         MakeSectionLabel("WHAT TO DO", content);
 
         var todoCard = MakeAutoSizeCard("WhatToDoCard", content);
-        _detailWhatToDo = GetAutoSizeCardText(todoCard);
-        _detailWhatToDo.lineSpacing = 12;
-        _detailWhatToDo.richText = true;
+        _detailWhatToDoStepsContainer = todoCard.transform;
+
+        // Keep the existing card styling, but space the individual recommendation
+        // rows cleanly inside it.
+        VerticalLayoutGroup todoLayout = todoCard.GetComponent<VerticalLayoutGroup>();
+        todoLayout.spacing = 8;
 
         var spacer = new GameObject("BottomSpacer", typeof(RectTransform), typeof(LayoutElement));
         spacer.transform.SetParent(content, false);
@@ -1561,6 +1537,181 @@ public class ReportUIBuilder : MonoBehaviour
         tm.enableWordWrapping = true;
 
         return tm;
+    }
+
+    /// <summary>
+    /// Rebuilds the What To Do card using font-independent visual check icons.
+    /// </summary>
+    void PopulateMitigationSteps(string rawMitigation)
+    {
+        if (_detailWhatToDoStepsContainer == null)
+        {
+            return;
+        }
+
+        // Remove the rows from the previously viewed item.
+        foreach (Transform child in _detailWhatToDoStepsContainer)
+        {
+            child.gameObject.SetActive(false);
+            Destroy(child.gameObject);
+        }
+
+        List<string> steps = SplitMitigationSteps(rawMitigation);
+
+        if (steps.Count == 0)
+        {
+            CreateMitigationMessage(
+                _detailWhatToDoStepsContainer,
+                "No mitigation information available for this item."
+            );
+            return;
+        }
+
+        for (int i = 0; i < steps.Count; i++)
+        {
+            CreateMitigationStepRow(_detailWhatToDoStepsContainer, steps[i], i);
+        }
+    }
+
+    /// <summary>
+    /// Creates one recommendation row with a teal circular check icon and wrapped text.
+    /// The checkmark is built from UI Images instead of a font glyph, preventing the
+    /// empty-square symbols that appeared when the current TMP font lacked ✓.
+    /// </summary>
+    static void CreateMitigationStepRow(Transform parent, string step, int index)
+    {
+        var row = new GameObject(
+            "MitigationStep_" + index,
+            typeof(RectTransform),
+            typeof(HorizontalLayoutGroup),
+            typeof(LayoutElement)
+        );
+        row.transform.SetParent(parent, false);
+
+        var rowLayout = row.GetComponent<HorizontalLayoutGroup>();
+        rowLayout.spacing = 10;
+        rowLayout.padding = new RectOffset(0, 0, 0, 0);
+        rowLayout.childAlignment = TextAnchor.MiddleLeft;
+        rowLayout.childControlWidth = true;
+        rowLayout.childControlHeight = true;
+        rowLayout.childForceExpandWidth = false;
+        rowLayout.childForceExpandHeight = false;
+
+        // Most steps fit on one line. Longer steps receive enough preferred height
+        // to wrap cleanly without overlapping the following row.
+        int estimatedLines = Mathf.Max(1, Mathf.CeilToInt(step.Length / 44f));
+        var rowElement = row.GetComponent<LayoutElement>();
+        rowElement.minHeight = 22f;
+        rowElement.preferredHeight = 22f + ((estimatedLines - 1) * 19f);
+        rowElement.flexibleWidth = 1f;
+
+        var icon = new GameObject(
+            "CheckIcon",
+            typeof(RectTransform),
+            typeof(Image),
+            typeof(LayoutElement)
+        );
+        icon.transform.SetParent(row.transform, false);
+
+        var iconElement = icon.GetComponent<LayoutElement>();
+        iconElement.minWidth = 18f;
+        iconElement.preferredWidth = 18f;
+        iconElement.minHeight = 18f;
+        iconElement.preferredHeight = 18f;
+        iconElement.flexibleWidth = 0f;
+        iconElement.flexibleHeight = 0f;
+
+        Image iconBackground = icon.GetComponent<Image>();
+        iconBackground.color = C_BTN_FILLED_BG;
+        iconBackground.raycastTarget = false;
+        SetRounded(iconBackground, 9f);
+
+        // Draw a checkmark using two thin rectangles. This remains consistent on
+        // every platform and with every TextMesh Pro font asset.
+        CreateCheckBar(
+            icon.transform,
+            "CheckShortBar",
+            new Vector2(-2.6f, -0.8f),
+            new Vector2(6.2f, 2.1f),
+            -45f
+        );
+
+        CreateCheckBar(
+            icon.transform,
+            "CheckLongBar",
+            new Vector2(2.1f, 0.7f),
+            new Vector2(9.2f, 2.1f),
+            45f
+        );
+
+        var textGo = new GameObject(
+            "StepText",
+            typeof(RectTransform),
+            typeof(TextMeshProUGUI),
+            typeof(LayoutElement)
+        );
+        textGo.transform.SetParent(row.transform, false);
+
+        var textElement = textGo.GetComponent<LayoutElement>();
+        textElement.flexibleWidth = 1f;
+        textElement.minWidth = 0f;
+
+        TextMeshProUGUI stepText = textGo.GetComponent<TextMeshProUGUI>();
+        stepText.text = step;
+        stepText.fontSize = 15f;
+        stepText.color = C_TEXT_PRIMARY;
+        stepText.fontStyle = FontStyles.Normal;
+        stepText.enableWordWrapping = true;
+        stepText.overflowMode = TextOverflowModes.Overflow;
+        stepText.alignment = TextAlignmentOptions.MidlineLeft;
+        stepText.raycastTarget = false;
+    }
+
+    static void CreateCheckBar(
+        Transform parent,
+        string name,
+        Vector2 anchoredPosition,
+        Vector2 size,
+        float rotationDegrees
+    )
+    {
+        var bar = new GameObject(name, typeof(RectTransform), typeof(Image));
+        bar.transform.SetParent(parent, false);
+
+        RectTransform rect = bar.GetComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = anchoredPosition;
+        rect.sizeDelta = size;
+        rect.localRotation = Quaternion.Euler(0f, 0f, rotationDegrees);
+
+        Image image = bar.GetComponent<Image>();
+        image.color = C_BTN_FILLED_TEXT;
+        image.raycastTarget = false;
+        SetRounded(image, 1f);
+    }
+
+    static void CreateMitigationMessage(Transform parent, string message)
+    {
+        var messageGo = new GameObject(
+            "MitigationMessage",
+            typeof(RectTransform),
+            typeof(TextMeshProUGUI),
+            typeof(LayoutElement)
+        );
+        messageGo.transform.SetParent(parent, false);
+
+        messageGo.GetComponent<LayoutElement>().flexibleWidth = 1f;
+
+        TextMeshProUGUI messageText = messageGo.GetComponent<TextMeshProUGUI>();
+        messageText.text = message;
+        messageText.fontSize = 15f;
+        messageText.color = C_TEXT_PRIMARY;
+        messageText.fontStyle = FontStyles.Normal;
+        messageText.enableWordWrapping = true;
+        messageText.alignment = TextAlignmentOptions.MidlineLeft;
+        messageText.raycastTarget = false;
     }
 
     // Adds an inset "fill" image on top of a card's border-colored background,
