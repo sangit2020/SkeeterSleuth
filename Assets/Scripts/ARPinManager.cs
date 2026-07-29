@@ -12,9 +12,20 @@ public class ARPinManager : MonoBehaviour
     public ScanManager scanManager;
 
     [Header("Confirmation Filtering")]
-    [Tooltip("A detection must meet this confidence before it can become a pin or saved report item.")]
+    [Tooltip("Fallback confidence used for classes that do not have a custom threshold below.")]
     [Range(0f, 1f)]
     public float minimumPinConfidence = 0.88f;
+
+    [Header("Per-Class Confidence Thresholds")]
+    [Tooltip("Use the class-specific thresholds below instead of one threshold for every object.")]
+    public bool usePerClassConfidenceThresholds = true;
+
+    [Range(0f, 1f)] public float birdBathPinConfidence = 0.88f;
+    [Range(0f, 1f)] public float bucketPinConfidence = 0.90f;
+    [Range(0f, 1f)] public float grillPinConfidence = 0.88f;
+    [Range(0f, 1f)] public float trashCanPinConfidence = 0.84f;
+    [Range(0f, 1f)] public float wateringCanPinConfidence = 0.84f;
+    [Range(0f, 1f)] public float wheelbarrowPinConfidence = 0.82f;
 
     [Tooltip("Number of consecutive YOLO inference results required before placing a pin.")]
     [Min(1)]
@@ -94,8 +105,9 @@ public class ARPinManager : MonoBehaviour
         {
             foreach (DetectionResult det in detections)
             {
-                if (det == null || det.confidence < minimumPinConfidence) continue;
+                if (det == null) continue;
                 if (string.IsNullOrWhiteSpace(det.label) || det.label == "unknown") continue;
+                if (det.confidence < GetMinimumPinConfidence(det.label)) continue;
                 if (activePins.ContainsKey(det.label)) continue;
 
                 if (!bestByLabel.TryGetValue(det.label, out DetectionResult currentBest) ||
@@ -174,6 +186,36 @@ public class ARPinManager : MonoBehaviour
         foreach (string label in staleLabels)
         {
             candidates.Remove(label);
+        }
+    }
+
+    private float GetMinimumPinConfidence(string label)
+    {
+        if (!usePerClassConfidenceThresholds || string.IsNullOrWhiteSpace(label))
+            return minimumPinConfidence;
+
+        switch (label.Trim().ToLowerInvariant())
+        {
+            case "ss_birdbath":
+                return birdBathPinConfidence;
+
+            case "ss_bucket":
+                return bucketPinConfidence;
+
+            case "ss_grill":
+                return grillPinConfidence;
+
+            case "ss_trashcan":
+                return trashCanPinConfidence;
+
+            case "ss_wateringcan":
+                return wateringCanPinConfidence;
+
+            case "ss_wheelbarrow":
+                return wheelbarrowPinConfidence;
+
+            default:
+                return minimumPinConfidence;
         }
     }
 

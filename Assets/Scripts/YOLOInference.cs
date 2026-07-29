@@ -15,6 +15,10 @@ public class YOLOInference : MonoBehaviour
 
     const int INPUT_SIZE = 640;
 
+    // These class IDs match the labels array near the bottom of this file.
+    const int BUCKET_CLASS_ID = 2;
+    const int TRASHCAN_CLASS_ID = 6;
+
     [Header("Detection Filtering")]
     [Tooltip("Low-level model cutoff. Final pins/reports use a stricter threshold in ARPinManager.")]
     [Range(0f, 1f)]
@@ -25,6 +29,18 @@ public class YOLOInference : MonoBehaviour
 
     [Tooltip("When enabled, overlapping boxes of different classes compete and only the strongest survives.")]
     public bool classAgnosticNms = true;
+
+    [Header("Bucket / Trash Can Rule")]
+    [Tooltip("When the model's top class is bucket, prefer trash can when the trash-can score is high enough and the bucket score is below the configured maximum.")]
+    public bool enableBucketTrashCanRule = true;
+
+    [Tooltip("Minimum trash-can score required to override a bucket prediction.")]
+    [Range(0f, 1f)]
+    public float trashCanOverrideMinimumConfidence = 0.84f;
+
+    [Tooltip("The bucket score must be below this value before trash can can override it.")]
+    [Range(0f, 1f)]
+    public float bucketOverrideMaximumConfidence = 0.94f;
 
     [Tooltip("Limits CPU inference frequency. 0.12 seconds is about 8 inferences per second.")]
     [Min(0f)]
@@ -406,6 +422,23 @@ public class YOLOInference : MonoBehaviour
                 {
                     confidence = score;
                     classId = c - 4;
+                }
+            }
+
+            // Targeted rule for the model's known bucket-versus-trash-can confusion.
+            // This runs before NMS, while both class scores are still available.
+            if (enableBucketTrashCanRule &&
+                classId == BUCKET_CLASS_ID &&
+                stride > 4 + TRASHCAN_CLASS_ID)
+            {
+                float bucketScore = output[(4 + BUCKET_CLASS_ID) * numDetections + i];
+                float trashCanScore = output[(4 + TRASHCAN_CLASS_ID) * numDetections + i];
+
+                if (trashCanScore >= trashCanOverrideMinimumConfidence &&
+                    bucketScore < bucketOverrideMaximumConfidence)
+                {
+                    classId = TRASHCAN_CLASS_ID;
+                    confidence = trashCanScore;
                 }
             }
 
